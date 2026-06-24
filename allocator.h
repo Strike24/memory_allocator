@@ -28,5 +28,6 @@ void *balloc(size_t size);
 void bfree(void *memory);
 
 void split_chunk(heapchunk *avail_chunk, size_t requested_size);
-
-bool find_free_chunk(heapchunk **output_ptr, size_t size);
+int increase_heap(heapchunk **output_ptr, size_t required_space);
+void *request_space(size_t required_space);
+void find_free_chunk(heapchunk **output_ptr, size_t size);
