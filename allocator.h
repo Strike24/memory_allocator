@@ -5,10 +5,14 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+// used to verify a chunk's integrety
+#define MAGIC_NUM 0xDEADBEEF
+
 typedef struct heapchunk
 {
     size_t size;
     bool is_inuse;
+    uint32_t magic_num;
     struct heapchunk *next;
 } heapchunk;
 
@@ -21,6 +25,7 @@ typedef struct
 int init_heap(heapinfo *heap);
 
 void *balloc(size_t size);
+void bfree(void *memory);
 
 void split_chunk(heapchunk *avail_chunk, size_t requested_size);
 

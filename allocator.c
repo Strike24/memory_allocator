@@ -35,6 +35,23 @@ void *balloc(size_t size)
     return allocated_memory;
 }
 
+void bfree(void *memory)
+{
+    if (memory == NULL)
+        return;
+
+    heapchunk *chunk = (heapchunk *)memory - 1; // Get the original chunk header
+
+    // Verify chunk integrety
+    if (chunk->magic_num != MAGIC_NUM)
+        return;
+
+    chunk->is_inuse = false;
+    heap.avail += chunk->size;
+    //! In the future, merge free chunks to avoid fragmentation (coalescing)
+    return;
+}
+
 void split_chunk(heapchunk *avail_chunk, size_t requested_size)
 {
     // shorten available chunk's size to the requested size
@@ -47,6 +64,7 @@ void split_chunk(heapchunk *avail_chunk, size_t requested_size)
     heapchunk *new_chunk = (heapchunk *)((char *)(avail_chunk + 1) + requested_size);
     new_chunk->size = remainder_size;
     new_chunk->is_inuse = false;
+    new_chunk->magic_num = MAGIC_NUM;
 
     // connect new_chunk to the heap list right after avail_chunk
     heapchunk *temp = avail_chunk->next;
@@ -86,6 +104,7 @@ int init_heap(heapinfo *heap)
     first->is_inuse = false;
     first->size = page_size - sizeof(heapchunk); // size left without the heapchunk header
     first->next = NULL;
+    first->magic_num = MAGIC_NUM;
 
     heap->start = first;
     heap->avail = first->size;
@@ -98,8 +117,11 @@ int init_heap(heapinfo *heap)
 int main()
 {
     int *ptr = (int *)balloc(32);
-    int *ptr4 = (int *)balloc(sizeof(int64_t));
+    int *ptr2 = (int *)balloc(4016);
 
-    printf("Test: %p\n", ptr);
+    bfree(ptr2);
+    int *ptr3 = (int *)balloc(32);
+
+    printf("Test: %p\n", ptr3);
     return 0;
 }
