@@ -5,17 +5,23 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-typedef struct heapchunk_h
+typedef struct heapchunk
 {
     size_t size;
     bool is_inuse;
-    struct heapchunk_h *next_free;
-} heapchunk_h;
+    struct heapchunk *next;
+} heapchunk;
 
 typedef struct
 {
-    heapchunk_h *start;
+    heapchunk *start;
     uint32_t avail;
 } heapinfo;
 
 int init_heap(heapinfo *heap);
+
+void *balloc(size_t size);
+
+void split_chunk(heapchunk *avail_chunk, size_t requested_size);
+
+bool find_free_chunk(heapchunk **output_ptr, size_t size);
