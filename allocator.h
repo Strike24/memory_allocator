@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <stddef.h>
 
 // used to verify a chunk's integrety
 #define MAGIC_NUM 0xDEADBEEF
@@ -15,8 +16,18 @@ typedef struct heapchunk
     bool is_inuse;
     uint32_t magic_num;
 
-    struct heapchunk *next;
-    struct heapchunk *prev;
+    // next,prev pointers aren't needed when chunk is being used
+    // Therfore, they can be replaced with the data when allocated
+    union
+    {
+        struct
+        {
+            struct heapchunk *next;
+            struct heapchunk *prev;
+        } list;
+
+        uint8_t payload[0]; // data label
+    };
 
 } heapchunk;
 

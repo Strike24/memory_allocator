@@ -35,8 +35,28 @@ void *balloc(size_t size)
     }
 
     // Skip over the header, return the memory chunk
-    void *allocated_memory = (void *)(free + 1);
+    void *allocated_memory = (void *)(free->payload);
     return allocated_memory;
+}
+
+void bfree(void *memory)
+{
+    if (memory == NULL)
+        return;
+
+    heapchunk *chunk = (heapchunk *)((char *)memory - offsetof(heapchunk, payload)); // Get the original chunk header
+
+    // Verify chunk integrety
+    if (chunk->magic_num != MAGIC_NUM)
+        return;
+
+    chunk->is_inuse = false;
+
+    // Add back to freelist
+    add_to_bin(chunk);
+
+    //! In the future, merge free chunks to avoid fragmentation (coalescing)
+    return;
 }
 
 int increase_heap(heapchunk **output_ptr, size_t required_space)
@@ -69,14 +89,14 @@ void add_to_bin(heapchunk *chunk)
     heapchunk *bin_head = heap.bins[bin_index];
     if (bin_head != NULL)
     {
-        bin_head->prev = chunk;
-        chunk->prev = NULL;
-        chunk->next = bin_head;
+        bin_head->list.prev = chunk;
+        chunk->list.prev = NULL;
+        chunk->list.next = bin_head;
     }
     else
     {
-        chunk->next = NULL;
-        chunk->prev = NULL;
+        chunk->list.next = NULL;
+        chunk->list.prev = NULL;
     }
 
     heap.bins[bin_index] = chunk;
@@ -88,40 +108,20 @@ void remove_from_bin(heapchunk *chunk)
     int bin_index = get_bin_index(chunk->size);
 
     // Disconnecting the previous block
-    if (chunk->prev != NULL)
-        chunk->prev->next = chunk->next;
+    if (chunk->list.prev != NULL)
+        chunk->list.prev->list.next = chunk->list.next;
     else
-        heap.bins[bin_index] = chunk->next;
+        heap.bins[bin_index] = chunk->list.next;
 
     // Disconnecting the next block
-    if (chunk->next != NULL)
-        chunk->next->prev = chunk->prev;
+    if (chunk->list.next != NULL)
+        chunk->list.next->list.prev = chunk->list.prev;
 
-    chunk->next = NULL;
-    chunk->prev = NULL;
+    chunk->list.next = NULL;
+    chunk->list.prev = NULL;
     chunk->is_inuse = true;
 
     heap.avail -= chunk->size;
-}
-
-void bfree(void *memory)
-{
-    if (memory == NULL)
-        return;
-
-    heapchunk *chunk = (heapchunk *)memory - 1; // Get the original chunk header
-
-    // Verify chunk integrety
-    if (chunk->magic_num != MAGIC_NUM)
-        return;
-
-    chunk->is_inuse = false;
-
-    // Add back to freelist
-    add_to_bin(chunk);
-
-    //! In the future, merge free chunks to avoid fragmentation (coalescing)
-    return;
 }
 
 void split_chunk(heapchunk *avail_chunk, size_t requested_size)
@@ -159,7 +159,7 @@ void find_free_chunk(heapchunk **output_ptr, size_t size)
                 *output_ptr = current;
                 return;
             }
-            current = current->next;
+            current = current->list.next;
         }
     }
 }
@@ -222,7 +222,9 @@ int main()
 {
     int *ptr = (int *)balloc(32);
 
+    *ptr = 515;
     printf("Test: %p\n", ptr);
+    printf("Test: %d\n", *ptr);
 
     bfree(ptr);
 
