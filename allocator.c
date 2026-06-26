@@ -53,6 +53,9 @@ void bfree(void *memory)
     if (chunk->magic_num != MAGIC_NUM)
         return;
 
+    if (chunk->is_inuse == false)
+        return;
+    
     chunk->is_inuse = false;
 
     // Add back to freelist
