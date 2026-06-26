@@ -12,6 +12,9 @@ void *balloc(size_t size)
             return NULL;
     }
 
+    if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
+        size = MIN_CHUNK_SIZE;
+
     // loop over free memory chunks to see if size is available
     heapchunk *free = NULL;
     find_free_chunk(&free, size);

@@ -9,6 +9,7 @@
 // used to verify a chunk's integrety
 #define MAGIC_NUM 0xDEADBEEF
 #define NUM_BINS 10
+#define MIN_CHUNK_SIZE 16
 
 typedef struct heapchunk
 {
