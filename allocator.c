@@ -5,7 +5,7 @@ static heapinfo heap = {0};
 void *balloc(size_t size)
 {
     // lazy init
-    if (heap.start == NULL)
+    if (heap.initalized == 0)
     {
         int rc = init_heap(&heap);
         if (rc != 0)
@@ -26,14 +26,14 @@ void *balloc(size_t size)
         }
     }
 
+    // Remove allocated chunk from the freelist
+    remove_from_bin(free);
+
     if (free->size > size + sizeof(heapchunk))
     {
         split_chunk(free, size);
-        heap.avail -= sizeof(heapchunk);
     }
 
-    free->is_inuse = true;
-    heap.avail -= size;
     // Skip over the header, return the memory chunk
     void *allocated_memory = (void *)(free + 1);
     return allocated_memory;
@@ -56,15 +56,52 @@ int increase_heap(heapchunk **output_ptr, size_t required_space)
 
     new_chunk->size = bytes_to_request - sizeof(heapchunk);
 
-    // connect new chunk to the heap
-    heapchunk *heap_end = heap.start;
-    while (heap_end->next != NULL)
-        heap_end = heap_end->next;
-    heap_end->next = new_chunk;
-
-    heap.avail += new_chunk->size;
+    // connect new chunk to the freelist
+    add_to_bin(new_chunk);
     *output_ptr = new_chunk;
     return 0;
+}
+
+void add_to_bin(heapchunk *chunk)
+{
+    // connect new chunk to the freelist
+    int bin_index = get_bin_index(chunk->size);
+    heapchunk *bin_head = heap.bins[bin_index];
+    if (bin_head != NULL)
+    {
+        bin_head->prev = chunk;
+        chunk->prev = NULL;
+        chunk->next = bin_head;
+    }
+    else
+    {
+        chunk->next = NULL;
+        chunk->prev = NULL;
+    }
+
+    heap.bins[bin_index] = chunk;
+    heap.avail += chunk->size;
+}
+
+void remove_from_bin(heapchunk *chunk)
+{
+    int bin_index = get_bin_index(chunk->size);
+
+    // Disconnecting the previous block
+    if (chunk->prev != NULL)
+        chunk->prev->next = chunk->next;
+    else
+        heap.bins[bin_index] = chunk->next;
+
+    // Disconnecting the next block
+    if (chunk->next != NULL)
+        chunk->next->prev = chunk->prev;
+
+    chunk->next = NULL;
+    chunk->prev = NULL;
+    chunk->is_inuse = true;
+
+    heap.avail -= chunk->size;
 }
 
 void bfree(void *memory)
@@ -79,7 +116,10 @@ void bfree(void *memory)
         return;
 
     chunk->is_inuse = false;
-    heap.avail += chunk->size;
+
+    // Add back to freelist
+    add_to_bin(chunk);
+
     //! In the future, merge free chunks to avoid fragmentation (coalescing)
     return;
 }
@@ -98,23 +138,29 @@ void split_chunk(heapchunk *avail_chunk, size_t requested_size)
     new_chunk->is_inuse = false;
     new_chunk->magic_num = MAGIC_NUM;
 
-    // connect new_chunk to the heap list right after avail_chunk
-    heapchunk *temp = avail_chunk->next;
-    avail_chunk->next = new_chunk;
-    new_chunk->next = temp;
+    // connect new_chunk to the freelist
+    add_to_bin(new_chunk);
 }
 
 void find_free_chunk(heapchunk **output_ptr, size_t size)
 {
-    heapchunk *current = heap.start;
-    while (current != NULL)
+    // Get wanted bin number
+    int bin_number = get_bin_index(size);
+
+    heapchunk *current = NULL;
+    // Search for free chunks in size, if non available check in bigger bins
+    for (int i = bin_number; i < NUM_BINS; i++)
     {
-        if (current->is_inuse == false && current->size >= size)
+        current = heap.bins[i];
+        while (current != NULL)
         {
-            *output_ptr = current;
-            return;
+            if (current->is_inuse == false && current->size >= size)
+            {
+                *output_ptr = current;
+                return;
+            }
+            current = current->next;
         }
-        current = current->next;
     }
 }
 
@@ -140,26 +186,45 @@ int init_heap(heapinfo *heap)
     heapchunk *first = (heapchunk *)mapped_memory;
     first->is_inuse = false;
     first->size = page_size - sizeof(heapchunk); // size left without the heapchunk header
-    first->next = NULL;
     first->magic_num = MAGIC_NUM;
 
-    heap->start = first;
-    heap->avail = first->size;
+    add_to_bin(first);
+    heap->initalized = true;
 
     printf("MMAP mapped page starting at: %p\n", mapped_memory);
 
     return 0;
 }
 
+int get_bin_index(size_t size)
+{
+    if (size <= 32) // Base case
+    {
+        return 0;
+    }
+
+    size_t s = size - 1;
+    int shifts = 0;
+    while (s > 0)
+    {
+        s >>= 1;
+        shifts++;
+    }
+
+    int index = shifts - 5;
+    if (index >= NUM_BINS)
+        return NUM_BINS - 1; // If over max bin put in max bin
+
+    return index;
+}
+
 int main()
 {
     int *ptr = (int *)balloc(32);
-    int *ptr3 = (int *)balloc(5000);
 
-    printf("Test: %p\n", ptr3);
+    printf("Test: %p\n", ptr);
 
     bfree(ptr);
-    bfree(ptr3);
 
     return 0;
 }
