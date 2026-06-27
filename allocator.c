@@ -16,13 +16,12 @@ void *balloc(size_t size)
         size = MIN_CHUNK_SIZE;
 
     // loop over free memory chunks to see if size is available
-    heapchunk *free = NULL;
-    find_free_chunk(&free, size);
+    heapchunk *free = find_free_chunk(size);
 
     if (free == NULL)
     {
-        int rc = increase_heap(&free, size);
-        if (rc < 0 || free == NULL)
+        free = increase_heap(size);
+        if (free == NULL)
         {
             perror("No available memory left or error occured.\n");
             return NULL;
@@ -32,7 +31,7 @@ void *balloc(size_t size)
     // Remove allocated chunk from the freelist
     remove_from_bin(free);
 
-    if (free->size > size + sizeof(heapchunk))
+    if (free->size > size + HEADER_SIZE)
     {
         split_chunk(free, size);
     }
@@ -55,40 +54,68 @@ void bfree(void *memory)
 
     if (chunk->is_inuse == false)
         return;
-    
+
     chunk->is_inuse = false;
+
+    heapchunk *next = next_phyiscal_chunk(chunk);
+    if (next != NULL && next->is_inuse == false)
+    {
+        merge_adj_chunks(chunk, next);
+    }
 
     // Add back to freelist
     add_to_bin(chunk);
 
-    //! In the future, merge free chunks to avoid fragmentation (coalescing)
     return;
 }
 
-int increase_heap(heapchunk **output_ptr, size_t required_space)
+static void merge_adj_chunks(heapchunk *original, heapchunk *next)
+{
+    remove_from_bin(next);
+
+    // Original now has next's size, and the size of next's header as its in use anymore
+    size_t total = original->size + next->size + HEADER_SIZE;
+    original->size = total;
+}
+
+static heapchunk *next_phyiscal_chunk(heapchunk *current)
+{
+    if (current == NULL)
+        return NULL;
+
+    size_t current_size = current->size;
+
+    // Get next physical chunk in memory
+    heapchunk *right_neighbor = (heapchunk *)((char *)current + HEADER_SIZE + current_size);
+    if (right_neighbor->magic_num != MAGIC_NUM)
+        return NULL;
+
+    return right_neighbor;
+}
+
+static heapchunk *increase_heap(size_t required_space)
 {
     size_t page_size = sysconf(_SC_PAGESIZE);
-    size_t total_required = required_space + sizeof(heapchunk);
+    size_t total_required = required_space + HEADER_SIZE;
 
     size_t num_of_pages = (total_required + page_size - 1) / page_size;
     size_t bytes_to_request = num_of_pages * page_size;
 
     heapchunk *new_chunk = (heapchunk *)request_space(bytes_to_request);
     if (new_chunk == NULL)
-        return -1;
+        return NULL;
 
     new_chunk->is_inuse = false;
     new_chunk->magic_num = MAGIC_NUM;
 
-    new_chunk->size = bytes_to_request - sizeof(heapchunk);
+    new_chunk->size = bytes_to_request - HEADER_SIZE;
 
     // connect new chunk to the freelist
     add_to_bin(new_chunk);
-    *output_ptr = new_chunk;
-    return 0;
+    return new_chunk;
 }
 
-void add_to_bin(heapchunk *chunk)
+static void add_to_bin(heapchunk *chunk)
 {
     // connect new chunk to the freelist
     int bin_index = get_bin_index(chunk->size);
@@ -109,7 +136,7 @@ void add_to_bin(heapchunk *chunk)
     heap.avail += chunk->size;
 }
 
-void remove_from_bin(heapchunk *chunk)
+static void remove_from_bin(heapchunk *chunk)
 {
     int bin_index = get_bin_index(chunk->size);
 
@@ -130,16 +157,16 @@ void remove_from_bin(heapchunk *chunk)
     heap.avail -= chunk->size;
 }
 
-void split_chunk(heapchunk *avail_chunk, size_t requested_size)
+static void split_chunk(heapchunk *avail_chunk, size_t requested_size)
 {
     // shorten available chunk's size to the requested size
     size_t original_size = avail_chunk->size;
     avail_chunk->size = requested_size;
 
     // create a new chunk where the user allocated memory ends
-    size_t remainder_size = original_size - requested_size - sizeof(heapchunk);
+    size_t remainder_size = original_size - requested_size - HEADER_SIZE;
 
-    heapchunk *new_chunk = (heapchunk *)((char *)(avail_chunk + 1) + requested_size);
+    heapchunk *new_chunk = (heapchunk *)((char *)avail_chunk + HEADER_SIZE + requested_size);
     new_chunk->size = remainder_size;
     new_chunk->is_inuse = false;
     new_chunk->magic_num = MAGIC_NUM;
@@ -148,9 +175,8 @@ void split_chunk(heapchunk *avail_chunk, size_t requested_size)
     add_to_bin(new_chunk);
 }
 
-void find_free_chunk(heapchunk **output_ptr, size_t size)
+static heapchunk *find_free_chunk(size_t size)
 {
-    // Get wanted bin number
     int bin_number = get_bin_index(size);
 
     heapchunk *current = NULL;
@@ -162,15 +188,16 @@ void find_free_chunk(heapchunk **output_ptr, size_t size)
         {
             if (current->is_inuse == false && current->size >= size)
             {
-                *output_ptr = current;
-                return;
+                return current;
             }
             current = current->list.next;
         }
     }
+
+    return NULL;
 }
 
-void *request_space(size_t required_space)
+static void *request_space(size_t required_space)
 {
     void *mapped_memory = mmap(NULL, required_space, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if (mapped_memory == MAP_FAILED)
@@ -182,7 +209,7 @@ void *request_space(size_t required_space)
     return mapped_memory;
 }
 
-int init_heap(heapinfo *heap)
+static int init_heap(heapinfo *heap)
 {
     size_t page_size = sysconf(_SC_PAGESIZE);
     // Ask the system for a memory page
@@ -191,7 +218,7 @@ int init_heap(heapinfo *heap)
     // Init headblock for the heap
     heapchunk *first = (heapchunk *)mapped_memory;
     first->is_inuse = false;
-    first->size = page_size - sizeof(heapchunk); // size left without the heapchunk header
+    first->size = page_size - HEADER_SIZE; // size left without the heapchunk header
     first->magic_num = MAGIC_NUM;
 
     add_to_bin(first);
@@ -202,7 +229,7 @@ int init_heap(heapinfo *heap)
     return 0;
 }
 
-int get_bin_index(size_t size)
+static int get_bin_index(size_t size)
 {
     if (size <= 32) // Base case
     {
@@ -223,16 +250,48 @@ int get_bin_index(size_t size)
 
     return index;
 }
-
+void print_test_result(const char *test_name, int passed)
+{
+    if (passed)
+    {
+        printf("[V] %s - PASSED\n", test_name);
+    }
+    else
+    {
+        printf("[X] %s - FAILED\n", test_name);
+    }
+}
 int main()
 {
-    int *ptr = (int *)balloc(32);
+    printf("\nRunning Test 5: Forward Coalescing (Right Merge)...\n");
 
-    *ptr = 515;
-    printf("Test: %p\n", ptr);
-    printf("Test: %d\n", *ptr);
+    // 1. נקצה 3 בלוקים צמודים
+    void *ptr_A = balloc(128);
+    void *ptr_B = balloc(128);
+    void *ptr_C = balloc(128); // מחסום כדי ש-B לא יתמזג בטעות עם שאר הדף
 
-    bfree(ptr);
+    printf("  -> ptr_A at: %p\n", ptr_A);
+    printf("  -> ptr_B at: %p\n", ptr_B);
+    printf("  -> ptr_C at: %p (Barrier)\n", ptr_C);
+
+    // 2. נשחרר את האמצעי (B). הוא ממתין למיזוג.
+    bfree(ptr_B);
+    printf("  -> Freed ptr_B\n");
+
+    // 3. נשחרר את הראשון (A). כאן צריך להתרחש מיזוג ימינה אל תוך B!
+    bfree(ptr_A);
+    printf("  -> Freed ptr_A (Should trigger coalesce with B)\n");
+
+    // 4. נבקש בלוק שגדול יותר מ-128 אבל נכנס ב-A+B.
+    // אם המיזוג עבד, נקבל חזרה בדיוק את הכתובת של A!
+    void *ptr_merged = balloc(200);
+    printf("  -> Requested 200 bytes, got: %p\n", ptr_merged);
+
+    print_test_result("Forward Coalescing (A swallowed B)", ptr_merged == ptr_A);
+
+    // ניקיון סופי
+    bfree(ptr_merged);
+    bfree(ptr_C);
 
     return 0;
 }

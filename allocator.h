@@ -10,6 +10,7 @@
 #define MAGIC_NUM 0xDEADBEEF
 #define NUM_BINS 10
 #define MIN_CHUNK_SIZE 16
+#define HEADER_SIZE offsetof(heapchunk, payload)
 
 typedef struct heapchunk
 {
@@ -39,26 +40,37 @@ typedef struct
     size_t avail;
 } heapinfo;
 
+// ==================
+// PUBLIC Functions
+// ==================
+
 // Main allocator function, takes a size and returns a curated memory chunk
 void *balloc(size_t size);
 // Frees the memory chunk and adds it back to the freelist, while verifying chunk's integrity
 void bfree(void *memory);
 
+// ==================
+// Internal Functions
+// ==================
+
 // Initializes a new heap with 1 memory page
-int init_heap(heapinfo *heap);
+static int init_heap(heapinfo *heap);
 
 // Searches for free chunks from the bins in O(1) at the average case
-void find_free_chunk(heapchunk **output_ptr, size_t size);
+static heapchunk *find_free_chunk(size_t size);
 
 // Calculates and classefies required bin based on chunk's size
-int get_bin_index(size_t size);
+static int get_bin_index(size_t size);
 
 // Splits one big chunk to save the unnecessary memory
-void split_chunk(heapchunk *avail_chunk, size_t requested_size);
+static void split_chunk(heapchunk *avail_chunk, size_t requested_size);
 
 // Asks the OS for more memory when the heap runs out
-int increase_heap(heapchunk **output_ptr, size_t required_space);
-void *request_space(size_t required_space);
+static heapchunk *increase_heap(size_t required_space);
+static void *request_space(size_t required_space);
 
-void add_to_bin(heapchunk *chunk);
-void remove_from_bin(heapchunk *chunk);
+static void add_to_bin(heapchunk *chunk);
+static void remove_from_bin(heapchunk *chunk);
+
+static void merge_adj_chunks(heapchunk *original, heapchunk *next);
+static heapchunk *next_phyiscal_chunk(heapchunk *current);
