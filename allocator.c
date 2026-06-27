@@ -7,8 +7,8 @@ void *balloc(size_t size)
     // lazy init
     if (heap.initalized == 0)
     {
-        int rc = init_heap(&heap);
-        if (rc != 0)
+        heapchunk *init = init_heap(&heap);
+        if (init == NULL)
             return NULL;
     }
 
