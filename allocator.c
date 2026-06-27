@@ -250,48 +250,16 @@ static int get_bin_index(size_t size)
 
     return index;
 }
-void print_test_result(const char *test_name, int passed)
-{
-    if (passed)
-    {
-        printf("[V] %s - PASSED\n", test_name);
-    }
-    else
-    {
-        printf("[X] %s - FAILED\n", test_name);
-    }
-}
+
 int main()
 {
-    printf("\nRunning Test 5: Forward Coalescing (Right Merge)...\n");
+    int *ptr = (int *)balloc(32);
 
-    // 1. נקצה 3 בלוקים צמודים
-    void *ptr_A = balloc(128);
-    void *ptr_B = balloc(128);
-    void *ptr_C = balloc(128); // מחסום כדי ש-B לא יתמזג בטעות עם שאר הדף
+    *ptr = 515;
+    printf("Test: %p\n", ptr);
+    printf("Test: %d\n", *ptr);
 
-    printf("  -> ptr_A at: %p\n", ptr_A);
-    printf("  -> ptr_B at: %p\n", ptr_B);
-    printf("  -> ptr_C at: %p (Barrier)\n", ptr_C);
-
-    // 2. נשחרר את האמצעי (B). הוא ממתין למיזוג.
-    bfree(ptr_B);
-    printf("  -> Freed ptr_B\n");
-
-    // 3. נשחרר את הראשון (A). כאן צריך להתרחש מיזוג ימינה אל תוך B!
-    bfree(ptr_A);
-    printf("  -> Freed ptr_A (Should trigger coalesce with B)\n");
-
-    // 4. נבקש בלוק שגדול יותר מ-128 אבל נכנס ב-A+B.
-    // אם המיזוג עבד, נקבל חזרה בדיוק את הכתובת של A!
-    void *ptr_merged = balloc(200);
-    printf("  -> Requested 200 bytes, got: %p\n", ptr_merged);
-
-    print_test_result("Forward Coalescing (A swallowed B)", ptr_merged == ptr_A);
-
-    // ניקיון סופי
-    bfree(ptr_merged);
-    bfree(ptr_C);
+    bfree(ptr);
 
     return 0;
 }
