@@ -7,8 +7,8 @@ void *balloc(size_t size)
     // lazy init
     if (heap.initalized == 0)
     {
-        heapchunk *init = init_heap(&heap);
-        if (init == NULL)
+        int rc = init_heap(&heap);
+        if (rc != 0)
             return NULL;
     }
 
@@ -56,7 +56,11 @@ void bfree(void *memory)
         return;
 
     if (chunk->is_inuse == false)
+    {
+        fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");
+        abort();
         return;
+    }
 
     chunk->is_inuse = false;
 
@@ -150,7 +154,7 @@ static void remove_from_bin(heapchunk *chunk)
         // validate pointers for safe unlinking
         if (chunk->list.prev->list.next != chunk)
         {
-            fprintf(stderr, "detected a corrupted doubly-linked list, aborting");
+            fprintf(stderr, "detected a corrupted doubly-linked list, aborting.\n");
             abort();
         }
 
@@ -165,7 +169,7 @@ static void remove_from_bin(heapchunk *chunk)
         // validate pointers for safe unlinking
         if (chunk->list.next->list.prev != chunk)
         {
-            fprintf(stderr, "detected a corrupted doubly-linked list, aborting");
+            fprintf(stderr, "detected a corrupted doubly-linked list, aborting.\n");
             abort();
         }
 
@@ -281,6 +285,7 @@ int main()
     printf("Test: %p\n", ptr);
     printf("Test: %d\n", *ptr);
 
+    bfree(ptr);
     bfree(ptr);
 
     return 0;

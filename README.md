@@ -16,4 +16,6 @@ The allocator uses a **best-fit** strategy to find the best chunk for allocation
 Heap Mitigations currently implemented:
 
 - Safe Unlinking:
-  The allocator checks the integrity of the free list pointers to ensure they did not get altered
+  The allocator checks the integrity of the free list pointers before unlinking to ensure they did not get altered
+- Double Free:
+  The allocator checks if a chunk is already freed before adding it back to the free list, and aborts if corrupt, preventing double free vulnerabilities.
