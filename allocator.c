@@ -15,6 +15,9 @@ void *balloc(size_t size)
     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
         size = MIN_CHUNK_SIZE;
 
+    // Align chunk size
+    size = (size + 15) & ~15;
+
     // loop over free memory chunks to see if size is available
     heapchunk *free = find_free_chunk(size);
 
@@ -142,13 +145,32 @@ static void remove_from_bin(heapchunk *chunk)
 
     // Disconnecting the previous block
     if (chunk->list.prev != NULL)
+    {
+
+        // validate pointers for safe unlinking
+        if (chunk->list.prev->list.next != chunk)
+        {
+            fprintf(stderr, "detected a corrupted doubly-linked list, aborting");
+            abort();
+        }
+
         chunk->list.prev->list.next = chunk->list.next;
+    }
     else
         heap.bins[bin_index] = chunk->list.next;
 
     // Disconnecting the next block
     if (chunk->list.next != NULL)
+    {
+        // validate pointers for safe unlinking
+        if (chunk->list.next->list.prev != chunk)
+        {
+            fprintf(stderr, "detected a corrupted doubly-linked list, aborting");
+            abort();
+        }
+
         chunk->list.next->list.prev = chunk->list.prev;
+    }
 
     chunk->list.next = NULL;
     chunk->list.prev = NULL;
@@ -253,7 +275,7 @@ static int get_bin_index(size_t size)
 
 int main()
 {
-    int *ptr = (int *)balloc(32);
+    int *ptr = (int *)balloc(30);
 
     *ptr = 515;
     printf("Test: %p\n", ptr);
