@@ -1,6 +1,7 @@
 #include "allocator.h"
 
 static heapinfo heap = {0};
+static size_t global_cookie = 0;
 
 void *balloc(size_t size)
 {
@@ -52,8 +53,12 @@ void bfree(void *memory)
     heapchunk *chunk = (heapchunk *)((char *)memory - offsetof(heapchunk, payload)); // Get the original chunk header
 
     // Verify chunk integrety
-    if (chunk->magic_num != MAGIC_NUM)
+    if (chunk->canary != calculate_canary(chunk))
+    {
+        fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
+        abort();
         return;
+    }
 
     if (chunk->is_inuse == false)
     {
@@ -76,6 +81,28 @@ void bfree(void *memory)
     return;
 }
 
+static int init_heap(heapinfo *heap)
+{
+    init_canary();
+
+    size_t page_size = sysconf(_SC_PAGESIZE);
+    // Ask the system for a memory page
+    void *mapped_memory = request_space(page_size);
+
+    // Init headblock for the heap
+    heapchunk *first = (heapchunk *)mapped_memory;
+    first->is_inuse = false;
+    first->size = page_size - HEADER_SIZE; // size left without the heapchunk header
+    first->canary = calculate_canary(first);
+
+    add_to_bin(first);
+    heap->initalized = true;
+
+    printf("MMAP mapped page starting at: %p\n", mapped_memory);
+
+    return 0;
+}
+
 static void merge_adj_chunks(heapchunk *original, heapchunk *next)
 {
     remove_from_bin(next);
@@ -94,7 +121,7 @@ static heapchunk *next_phyiscal_chunk(heapchunk *current)
 
     // Get next physical chunk in memory
     heapchunk *right_neighbor = (heapchunk *)((char *)current + HEADER_SIZE + current_size);
-    if (right_neighbor->magic_num != MAGIC_NUM)
+    if (right_neighbor->canary != calculate_canary(right_neighbor))
         return NULL;
 
     return right_neighbor;
@@ -113,7 +140,7 @@ static heapchunk *increase_heap(size_t required_space)
         return NULL;
 
     new_chunk->is_inuse = false;
-    new_chunk->magic_num = MAGIC_NUM;
+    new_chunk->canary = calculate_canary(new_chunk);
 
     new_chunk->size = bytes_to_request - HEADER_SIZE;
 
@@ -195,7 +222,7 @@ static void split_chunk(heapchunk *avail_chunk, size_t requested_size)
     heapchunk *new_chunk = (heapchunk *)((char *)avail_chunk + HEADER_SIZE + requested_size);
     new_chunk->size = remainder_size;
     new_chunk->is_inuse = false;
-    new_chunk->magic_num = MAGIC_NUM;
+    new_chunk->canary = calculate_canary(new_chunk);
 
     // connect new_chunk to the freelist
     add_to_bin(new_chunk);
@@ -235,26 +262,6 @@ static void *request_space(size_t required_space)
     return mapped_memory;
 }
 
-static int init_heap(heapinfo *heap)
-{
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    // Ask the system for a memory page
-    void *mapped_memory = request_space(page_size);
-
-    // Init headblock for the heap
-    heapchunk *first = (heapchunk *)mapped_memory;
-    first->is_inuse = false;
-    first->size = page_size - HEADER_SIZE; // size left without the heapchunk header
-    first->magic_num = MAGIC_NUM;
-
-    add_to_bin(first);
-    heap->initalized = true;
-
-    printf("MMAP mapped page starting at: %p\n", mapped_memory);
-
-    return 0;
-}
-
 static int get_bin_index(size_t size)
 {
     if (size <= 32) // Base case
@@ -277,15 +284,34 @@ static int get_bin_index(size_t size)
     return index;
 }
 
+static void init_canary()
+{
+    FILE *urandom = fopen("/dev/urandom", "r");
+    if (urandom != NULL)
+    {
+        fread(&global_cookie, sizeof(size_t), 1, urandom);
+        fclose(urandom);
+    }
+    else
+    {
+        // Fallback when urandom doesnt work
+        global_cookie = MAGIC_NUM ^ (size_t)&global_cookie;
+    }
+}
+
+static inline size_t calculate_canary(heapchunk *chunk)
+{
+    return global_cookie ^ (size_t)chunk;
+}
+
 int main()
 {
-    int *ptr = (int *)balloc(30);
+    int *ptr = (int *)balloc(5020);
 
     *ptr = 515;
     printf("Test: %p\n", ptr);
     printf("Test: %d\n", *ptr);
 
-    bfree(ptr);
     bfree(ptr);
 
     return 0;

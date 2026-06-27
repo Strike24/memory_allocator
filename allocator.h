@@ -12,11 +12,11 @@
 #define MIN_CHUNK_SIZE 16
 #define HEADER_SIZE offsetof(heapchunk, payload)
 
-typedef struct heapchunk
+typedef struct __attribute__((packed)) heapchunk
 {
     size_t size;
     bool is_inuse;
-    uint32_t magic_num;
+    size_t canary;
 
     // next,prev pointers aren't needed when chunk is being used
     // Therfore, they can be replaced with the data when allocated
@@ -61,6 +61,9 @@ static heapchunk *find_free_chunk(size_t size);
 
 // Calculates and classefies required bin based on chunk's size
 static int get_bin_index(size_t size);
+
+static void init_canary();
+static inline size_t calculate_canary(heapchunk *chunk);
 
 // Splits one big chunk to save the unnecessary memory
 static void split_chunk(heapchunk *avail_chunk, size_t requested_size);
