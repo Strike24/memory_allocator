@@ -6,14 +6,16 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <pthread.h>
+#include <string.h>
 
 // used to verify a chunk's integrety
 #define MAGIC_NUM 0xDEADBEEF
+#define OVERWRITE_HEX 0xDE
 #define NUM_BINS 10
 #define MIN_CHUNK_SIZE 16
 #define HEADER_SIZE offsetof(heapchunk, payload)
 
-typedef struct __attribute__((packed)) heapchunk
+typedef struct heapchunk
 {
     size_t size;
     bool is_inuse;
@@ -31,7 +33,6 @@ typedef struct __attribute__((packed)) heapchunk
 
         uint8_t payload[0]; // data label
     };
-
 } heapchunk;
 
 typedef struct heapinfo

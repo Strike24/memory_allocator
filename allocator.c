@@ -79,6 +79,9 @@ void bfree(void *memory)
 
     chunk->is_inuse = false;
 
+    // Overwrite old data to prevent Use-After-Free's
+    memset(chunk->payload, OVERWRITE_HEX, chunk->size);
+
     heapchunk *next = next_phyiscal_chunk(chunk);
     if (next != NULL && next->is_inuse == false)
     {
@@ -318,7 +321,7 @@ static inline size_t calculate_canary(heapchunk *chunk)
 static void print_debug()
 {
     printf("-=- Heap Debug Information -=-\n");
-    printf("- Available space: %ld bytes\n", heap.avail);
+    printf("- Avail space: %ld bytes\n", heap.avail);
     printf("- Number of bins in each bucket:\n");
     for (int i = 0; i < NUM_BINS; i++)
     {
@@ -337,11 +340,12 @@ int main()
 {
     int *ptr = (int *)balloc(32);
 
-    *ptr = 515;
+    *ptr = 515774444;
     printf("Test: %p\n", ptr);
     printf("Test: %d\n", *ptr);
+
     bfree(ptr);
-    print_debug();
+    printf("After: %d\n", *ptr);
 
     return 0;
 }
