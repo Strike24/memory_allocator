@@ -2,6 +2,7 @@
 
 static heapinfo heap = {0};
 static size_t global_cookie = 0;
+static pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to allow thread-safe allocation
 
 void *balloc(size_t size)
 {
@@ -12,6 +13,8 @@ void *balloc(size_t size)
         if (rc != 0)
             return NULL;
     }
+
+    pthread_mutex_lock(&heap_lock);
 
     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
         size = MIN_CHUNK_SIZE;
@@ -28,6 +31,7 @@ void *balloc(size_t size)
         if (free == NULL)
         {
             perror("No available memory left or error occured.\n");
+            pthread_mutex_unlock(&heap_lock);
             return NULL;
         }
     }
@@ -42,6 +46,8 @@ void *balloc(size_t size)
 
     // Skip over the header, return the memory chunk
     void *allocated_memory = (void *)(free->payload);
+
+    pthread_mutex_unlock(&heap_lock);
     return allocated_memory;
 }
 
@@ -50,12 +56,15 @@ void bfree(void *memory)
     if (memory == NULL)
         return;
 
+    pthread_mutex_lock(&heap_lock);
+
     heapchunk *chunk = (heapchunk *)((char *)memory - offsetof(heapchunk, payload)); // Get the original chunk header
 
     // Verify chunk integrety
     if (chunk->canary != calculate_canary(chunk))
     {
         fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
+        pthread_mutex_unlock(&heap_lock);
         abort();
         return;
     }
@@ -63,6 +72,7 @@ void bfree(void *memory)
     if (chunk->is_inuse == false)
     {
         fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");
+        pthread_mutex_unlock(&heap_lock);
         abort();
         return;
     }
@@ -77,30 +87,9 @@ void bfree(void *memory)
 
     // Add back to freelist
     add_to_bin(chunk);
+    pthread_mutex_unlock(&heap_lock);
 
     return;
-}
-
-static int init_heap(heapinfo *heap)
-{
-    init_canary();
-
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    // Ask the system for a memory page
-    void *mapped_memory = request_space(page_size);
-
-    // Init headblock for the heap
-    heapchunk *first = (heapchunk *)mapped_memory;
-    first->is_inuse = false;
-    first->size = page_size - HEADER_SIZE; // size left without the heapchunk header
-    first->canary = calculate_canary(first);
-
-    add_to_bin(first);
-    heap->initalized = true;
-
-    printf("MMAP mapped page starting at: %p\n", mapped_memory);
-
-    return 0;
 }
 
 static void merge_adj_chunks(heapchunk *original, heapchunk *next)
@@ -284,6 +273,28 @@ static int get_bin_index(size_t size)
     return index;
 }
 
+static int init_heap(heapinfo *heap)
+{
+    init_canary();
+
+    size_t page_size = sysconf(_SC_PAGESIZE);
+    // Ask the system for a memory page
+    void *mapped_memory = request_space(page_size);
+
+    // Init headblock for the heap
+    heapchunk *first = (heapchunk *)mapped_memory;
+    first->is_inuse = false;
+    first->size = page_size - HEADER_SIZE; // size left without the heapchunk header
+    first->canary = calculate_canary(first);
+
+    add_to_bin(first);
+    heap->initalized = true;
+
+    printf("MMAP mapped page starting at: %p\n", mapped_memory);
+
+    return 0;
+}
+
 static void init_canary()
 {
     FILE *urandom = fopen("/dev/urandom", "r");
@@ -304,15 +315,33 @@ static inline size_t calculate_canary(heapchunk *chunk)
     return global_cookie ^ (size_t)chunk;
 }
 
+static void print_debug()
+{
+    printf("-=- Heap Debug Information -=-\n");
+    printf("- Available space: %ld bytes\n", heap.avail);
+    printf("- Number of bins in each bucket:\n");
+    for (int i = 0; i < NUM_BINS; i++)
+    {
+        heapchunk *current = heap.bins[i];
+        int count = 0;
+        while (current != NULL)
+        {
+            count++;
+            current = current->list.next;
+        }
+        printf("  * Bucket #%d - %d\n", i, count);
+    }
+}
+
 int main()
 {
-    int *ptr = (int *)balloc(5020);
+    int *ptr = (int *)balloc(32);
 
     *ptr = 515;
     printf("Test: %p\n", ptr);
     printf("Test: %d\n", *ptr);
-
     bfree(ptr);
+    print_debug();
 
     return 0;
 }

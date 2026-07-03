@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <pthread.h>
 
 // used to verify a chunk's integrety
 #define MAGIC_NUM 0xDEADBEEF
@@ -33,7 +34,7 @@ typedef struct __attribute__((packed)) heapchunk
 
 } heapchunk;
 
-typedef struct
+typedef struct heapinfo
 {
     heapchunk *bins[NUM_BINS];
     bool initalized;

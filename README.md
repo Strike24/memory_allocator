@@ -19,5 +19,5 @@ Heap Mitigations currently implemented:
   The allocator checks the integrity of the free list pointers before unlinking to ensure they did not get altered
 - Double Free:
   The allocator checks if a chunk is already freed before adding it back to the free list, and aborts if corrupt, preventing double free vulnerabilities.
-- Heap Canaries:
+- Heap Canaries ("Security Cookies"):
   The allocator adds a canary value at the header of each chunk to detect buffer overflows. If the canary is altered, the allocator aborts the program.
