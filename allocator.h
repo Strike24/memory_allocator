@@ -14,6 +14,8 @@
 #define NUM_BINS 10
 #define MIN_CHUNK_SIZE 16
 #define HEADER_SIZE offsetof(heapchunk, payload)
+#define ARENA_SIZE (2 * 1024 * 1024) // 2MB
+#define PAGE_SIZE sysconf(_SC_PAGESIZE);
 
 typedef struct heapchunk
 {
@@ -55,7 +57,7 @@ void bfree(void *memory);
 // Internal Functions
 // ==================
 
-// Initializes a new heap with 1 memory page
+// Initializes a new heap and asks OS for virtual continuous addresses
 static int init_heap(heapinfo *heap);
 
 // Searches for free chunks from the bins in O(1) at the average case
@@ -70,7 +72,7 @@ static inline size_t calculate_canary(heapchunk *chunk);
 // Splits one big chunk to save the unnecessary memory
 static void split_chunk(heapchunk *avail_chunk, size_t requested_size);
 
-// Asks the OS for more memory when the heap runs out
+// Asks OS for more addresses when needing more space than first mapped
 static heapchunk *increase_heap(size_t required_space);
 static void *request_space(size_t required_space);
 

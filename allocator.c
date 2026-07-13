@@ -6,6 +6,8 @@ static pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to a
 
 void *balloc(size_t size)
 {
+    pthread_mutex_lock(&heap_lock);
+
     // lazy init
     if (heap.initalized == 0)
     {
@@ -13,8 +15,6 @@ void *balloc(size_t size)
         if (rc != 0)
             return NULL;
     }
-
-    pthread_mutex_lock(&heap_lock);
 
     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
         size = MIN_CHUNK_SIZE;
@@ -79,9 +79,10 @@ void bfree(void *memory)
 
     chunk->is_inuse = false;
 
-    // Overwrite old data to prevent Use-After-Free's
+    // overwrite old data to prevent uaf's
     memset(chunk->payload, OVERWRITE_HEX, chunk->size);
 
+    // merge next phyiscal chunk (if free and exists) to avoid fragmentation
     heapchunk *next = next_phyiscal_chunk(chunk);
     if (next != NULL && next->is_inuse == false)
     {
@@ -99,7 +100,7 @@ static void merge_adj_chunks(heapchunk *original, heapchunk *next)
 {
     remove_from_bin(next);
 
-    // Original now has next's size, and the size of next's header as its in use anymore
+    // original now has next's size, and the size of next's header as its in use anymore
     size_t total = original->size + next->size + HEADER_SIZE;
     original->size = total;
 }
@@ -111,7 +112,7 @@ static heapchunk *next_phyiscal_chunk(heapchunk *current)
 
     size_t current_size = current->size;
 
-    // Get next physical chunk in memory
+    // get next physical chunk in memory
     heapchunk *right_neighbor = (heapchunk *)((char *)current + HEADER_SIZE + current_size);
     if (right_neighbor->canary != calculate_canary(right_neighbor))
         return NULL;
@@ -280,14 +281,14 @@ static int init_heap(heapinfo *heap)
 {
     init_canary();
 
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    // Ask the system for a memory page
-    void *mapped_memory = request_space(page_size);
+    // Map virtual addresses to later be used when needed
+    size_t arena_size = ARENA_SIZE;
+    void *mapped_memory = request_space(arena_size);
 
     // Init headblock for the heap
     heapchunk *first = (heapchunk *)mapped_memory;
     first->is_inuse = false;
-    first->size = page_size - HEADER_SIZE; // size left without the heapchunk header
+    first->size = arena_size - HEADER_SIZE; // size left without the heapchunk header
     first->canary = calculate_canary(first);
 
     add_to_bin(first);
@@ -339,12 +340,24 @@ static void print_debug()
 int main()
 {
     int *ptr = (int *)balloc(32);
+    int *ptr2 = (int *)balloc(32);
+    int *ptr3 = (int *)balloc(64);
+    int *ptr4 = (int *)balloc(6413);
+    int *ptr5 = (int *)balloc(5353);
+    int *ptr6 = (int *)balloc(10000);
 
     *ptr = 515774444;
+    *ptr6 = 6766767;
     printf("Test: %p\n", ptr);
     printf("Test: %d\n", *ptr);
 
+    bfree(ptr6);
+    bfree(ptr5);
+    bfree(ptr4);
+    bfree(ptr3);
+    bfree(ptr2);
     bfree(ptr);
+
     printf("After: %d\n", *ptr);
 
     return 0;

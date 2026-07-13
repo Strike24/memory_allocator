@@ -6,9 +6,8 @@ Work in progress
 
 ## How it works
 
-A **binning** allocator that uses a free list to manage allocated memory chunks.
+A **"Segregated Bins"** allocator that uses a free list to manage allocated memory chunks.
 The bins are organized by size classes, each containing a list of free aligned memory chunks, assuring O(1) allocation complexity (At least in the average case)
-
 The allocator uses a **best-fit** strategy to find the best chunk for allocation, and it splits larger chunks when necessary. When a chunk is freed, it is added back to the free list and is merged with adjacent free chunks if possible.
 
 The allocator also includes a mutex lock to ensure thread safety during allocation and deallocation.
