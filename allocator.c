@@ -91,9 +91,30 @@ void bfree(void *memory)
 
     // Add back to freelist
     add_to_bin(chunk);
-    pthread_mutex_unlock(&heap_lock);
+    advise_free(chunk);
 
+    pthread_mutex_unlock(&heap_lock);
     return;
+}
+
+static void advise_free(heapchunk *chunk)
+{
+    uintptr_t payload_start = (uintptr_t)chunk->payload;
+    uintptr_t payload_end = (uintptr_t)chunk->payload + chunk->size;
+
+    if (payload_end == 0 || payload_start == 0)
+        return;
+
+    uintptr_t pages_start_address = ROUND_UP_PAGE(payload_start, PAGE_SIZE);
+    uintptr_t pages_end_address = ROUND_DOWN_PAGE(payload_end, PAGE_SIZE);
+
+    int pages_length = pages_end_address - pages_start_address;
+    // if one or more pages fit in the chunk's payload,
+    if ((pages_start_address < pages_end_address) && (pages_length >= REQ_PAGES_TO_FREE * PAGE_SIZE))
+    {
+        if (madvise((void *)pages_start_address, pages_length, MADV_DONTNEED) == -1)
+            perror("madvise failed");
+    }
 }
 
 static void merge_adj_chunks(heapchunk *original, heapchunk *next)
@@ -339,26 +360,15 @@ static void print_debug()
 
 int main()
 {
-    int *ptr = (int *)balloc(32);
-    int *ptr2 = (int *)balloc(32);
-    int *ptr3 = (int *)balloc(64);
-    int *ptr4 = (int *)balloc(6413);
-    int *ptr5 = (int *)balloc(5353);
-    int *ptr6 = (int *)balloc(10000);
+    size_t size = 20 * 1024 * 1024;
+    char *ptr = (char *)balloc(size);
 
-    *ptr = 515774444;
-    *ptr6 = 6766767;
-    printf("Test: %p\n", ptr);
-    printf("Test: %d\n", *ptr);
+    for (size_t i = 0; i < size; i += 4096)
+    {
+        ptr[i] = 'A';
+    }
 
-    bfree(ptr6);
-    bfree(ptr5);
-    bfree(ptr4);
-    bfree(ptr3);
-    bfree(ptr2);
     bfree(ptr);
-
-    printf("After: %d\n", *ptr);
 
     return 0;
 }

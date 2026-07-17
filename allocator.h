@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -14,8 +15,11 @@
 #define NUM_BINS 10
 #define MIN_CHUNK_SIZE 16
 #define HEADER_SIZE offsetof(heapchunk, payload)
+#define ROUND_DOWN_PAGE(n, page_size) ((n) & ~((page_size) - 1))
+#define ROUND_UP_PAGE(n, page_size) (((n) + (page_size) - 1) & ~((page_size) - 1))
 #define ARENA_SIZE (2 * 1024 * 1024) // 2MB
-#define PAGE_SIZE sysconf(_SC_PAGESIZE);
+#define PAGE_SIZE sysconf(_SC_PAGESIZE)
+#define REQ_PAGES_TO_FREE 1
 
 typedef struct heapchunk
 {
@@ -81,3 +85,5 @@ static void remove_from_bin(heapchunk *chunk);
 
 static void merge_adj_chunks(heapchunk *original, heapchunk *next);
 static heapchunk *next_phyiscal_chunk(heapchunk *current);
+
+static void advise_free(heapchunk *chunk);
