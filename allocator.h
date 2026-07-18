@@ -17,6 +17,8 @@
 #define HEADER_SIZE offsetof(heapchunk, payload)
 #define ROUND_DOWN_PAGE(n, page_size) ((n) & ~((page_size) - 1))
 #define ROUND_UP_PAGE(n, page_size) (((n) + (page_size) - 1) & ~((page_size) - 1))
+#define ALIGNMENT 16
+#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1))
 #define ARENA_SIZE (2 * 1024 * 1024) // 2MB
 #define PAGE_SIZE sysconf(_SC_PAGESIZE)
 #define REQ_PAGES_TO_FREE 1
@@ -56,6 +58,8 @@ typedef struct heapinfo
 void *balloc(size_t size);
 // Frees the memory chunk and adds it back to the freelist, while verifying chunk's integrity
 void bfree(void *memory);
+// Resizes the size of a memory block
+void *brealloc(void *memory, size_t size);
 
 // ==================
 // Internal Functions
@@ -83,7 +87,9 @@ static void *request_space(size_t required_space);
 static void add_to_bin(heapchunk *chunk);
 static void remove_from_bin(heapchunk *chunk);
 
+// merge chunk next into chunk original
 static void merge_adj_chunks(heapchunk *original, heapchunk *next);
 static heapchunk *next_phyiscal_chunk(heapchunk *current);
+static heapchunk *get_validated_chunk(void *memory);
 
 static void advise_free(heapchunk *chunk);

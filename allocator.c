@@ -20,7 +20,7 @@ void *balloc(size_t size)
         size = MIN_CHUNK_SIZE;
 
     // Align chunk size
-    size = (size + 15) & ~15;
+    size = ALIGN(size);
 
     // loop over free memory chunks to see if size is available
     heapchunk *free = find_free_chunk(size);
@@ -39,10 +39,8 @@ void *balloc(size_t size)
     // Remove allocated chunk from the freelist
     remove_from_bin(free);
 
-    if (free->size > size + HEADER_SIZE)
-    {
-        split_chunk(free, size);
-    }
+    // attempt to split chunk if enough free space
+    split_chunk(free, size);
 
     // Skip over the header, return the memory chunk
     void *allocated_memory = (void *)(free->payload);
@@ -58,24 +56,7 @@ void bfree(void *memory)
 
     pthread_mutex_lock(&heap_lock);
 
-    heapchunk *chunk = (heapchunk *)((char *)memory - offsetof(heapchunk, payload)); // Get the original chunk header
-
-    // Verify chunk integrety
-    if (chunk->canary != calculate_canary(chunk))
-    {
-        fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
-        pthread_mutex_unlock(&heap_lock);
-        abort();
-        return;
-    }
-
-    if (chunk->is_inuse == false)
-    {
-        fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");
-        pthread_mutex_unlock(&heap_lock);
-        abort();
-        return;
-    }
+    heapchunk *chunk = get_validated_chunk(memory);
 
     chunk->is_inuse = false;
 
@@ -97,9 +78,90 @@ void bfree(void *memory)
     return;
 }
 
+void *brealloc(void *memory, size_t size)
+{
+    pthread_mutex_lock(&heap_lock);
+    if (memory == NULL)
+    {
+        pthread_mutex_unlock(&heap_lock);
+        return balloc(size);
+    }
+
+    if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
+        size = MIN_CHUNK_SIZE;
+
+    // Align chunk size
+    size = ALIGN(size);
+
+    heapchunk *original_chunk = get_validated_chunk(memory);
+
+    size_t current_size = original_chunk->size;
+
+    // -- shrinking / not changing
+    if (size <= current_size)
+    {
+        split_chunk(original_chunk, size);
+
+        pthread_mutex_unlock(&heap_lock);
+        return (void *)original_chunk->payload;
+    }
+
+    // -- growing
+    heapchunk *next = next_phyiscal_chunk(original_chunk);
+
+    // in place?
+    if (next != NULL && next->is_inuse == false &&
+        (current_size + HEADER_SIZE + next->size >= size))
+    {
+        merge_adj_chunks(original_chunk, next);
+
+        // attempt to split if enough space
+        split_chunk(original_chunk, size);
+
+        pthread_mutex_unlock(&heap_lock);
+        return (void *)original_chunk->payload;
+    }
+
+    // not enough space, must relocate
+    pthread_mutex_unlock(&heap_lock);
+
+    void *new_allocated = balloc(size);
+    if (new_allocated == NULL)
+    {
+        return NULL;
+    }
+
+    // copy old chunk's data to the new allocated space
+    memcpy(new_allocated, memory, current_size);
+
+    // free old chunk
+    bfree(original_chunk->payload);
+    return new_allocated;
+}
+
+static heapchunk *get_validated_chunk(void *memory)
+{
+    if (memory == NULL)
+        return NULL;
+
+    heapchunk *chunk = (heapchunk *)((char *)memory - offsetof(heapchunk, payload));
+
+    if (chunk->canary != calculate_canary(chunk))
+    {
+        fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
+        abort();
+    }
+    if (chunk->is_inuse == false)
+    {
+        fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");
+        abort();
+    }
+    return chunk;
+}
+
 static void advise_free(heapchunk *chunk)
 {
-    uintptr_t payload_start = (uintptr_t)chunk->payload;
+    uintptr_t payload_start = (uintptr_t)chunk->payload + MIN_CHUNK_SIZE;
     uintptr_t payload_end = (uintptr_t)chunk->payload + chunk->size;
 
     if (payload_end == 0 || payload_start == 0)
@@ -135,7 +197,7 @@ static heapchunk *next_phyiscal_chunk(heapchunk *current)
 
     // get next physical chunk in memory
     heapchunk *right_neighbor = (heapchunk *)((char *)current + HEADER_SIZE + current_size);
-    if (right_neighbor->canary != calculate_canary(right_neighbor))
+    if (right_neighbor == NULL || right_neighbor->canary != calculate_canary(right_neighbor))
         return NULL;
 
     return right_neighbor;
@@ -226,6 +288,11 @@ static void remove_from_bin(heapchunk *chunk)
 
 static void split_chunk(heapchunk *avail_chunk, size_t requested_size)
 {
+    if (avail_chunk->size < requested_size + HEADER_SIZE + MIN_CHUNK_SIZE)
+    {
+        return; // not enough space to split
+    }
+
     // shorten available chunk's size to the requested size
     size_t original_size = avail_chunk->size;
     avail_chunk->size = requested_size;
@@ -360,15 +427,13 @@ static void print_debug()
 
 int main()
 {
-    size_t size = 20 * 1024 * 1024;
-    char *ptr = (char *)balloc(size);
+    char *victim1 = (char *)balloc(16);
+    char *victim2 = (char *)balloc(16);
 
-    for (size_t i = 0; i < size; i += 4096)
-    {
-        ptr[i] = 'A';
-    }
+    heapchunk *v1_header = (heapchunk *)((char *)victim1 - offsetof(heapchunk, payload));
+    size_t actual_payload_size = v1_header->size;
+    // memset(victim1, 'A', actual_payload_size + sizeof(heapchunk));
 
-    bfree(ptr);
-
+    bfree(victim2);
     return 0;
 }
