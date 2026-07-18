@@ -174,7 +174,7 @@ static void advise_free(heapchunk *chunk)
     // if one or more pages fit in the chunk's payload,
     if ((pages_start_address < pages_end_address) && (pages_length >= REQ_PAGES_TO_FREE * PAGE_SIZE))
     {
-        if (madvise((void *)pages_start_address, pages_length, MADV_DONTNEED) == -1)
+        if (madvise((void *)pages_start_address, pages_length, MADV_FREE) == -1)
             perror("madvise failed");
     }
 }
