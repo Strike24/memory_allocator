@@ -1,8 +1,7 @@
-# Memory Allocator
+# Secure Memory Allocator
 
 Custom memory allocator (malloc) implemented in C.
-balloc - bad allocator :)
-Work in progress
+salloc - secure allocator :)
 
 ## How it works
 
@@ -20,3 +19,4 @@ Heap Mitigations currently implemented:
   overwrite freed chunks with garbage data to prevent use-after-free vulnerabilities.
 - Heap Canaries ("Security Cookies"):
   canary value at the header of each chunk to detect buffer overflows. If the canary is altered, the allocator aborts the program.
+  canary value is generated using a random number generator at the start of the program and is unique for each run.

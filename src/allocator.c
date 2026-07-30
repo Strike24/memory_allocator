@@ -12,7 +12,7 @@ heapinfo heap = {0};
 size_t global_cookie = 0;
 static pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to allow thread-safe allocation
 
-void *balloc(size_t size)
+void *salloc(size_t size)
 {
     pthread_mutex_lock(&heap_lock);
 
@@ -57,7 +57,7 @@ void *balloc(size_t size)
     return allocated_memory;
 }
 
-void bfree(void *memory)
+void sfree(void *memory)
 {
     if (memory == NULL)
         return;
@@ -86,13 +86,13 @@ void bfree(void *memory)
     return;
 }
 
-void *brealloc(void *memory, size_t size)
+void *srealloc(void *memory, size_t size)
 {
     pthread_mutex_lock(&heap_lock);
     if (memory == NULL)
     {
         pthread_mutex_unlock(&heap_lock);
-        return balloc(size);
+        return salloc(size);
     }
 
     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
@@ -133,7 +133,7 @@ void *brealloc(void *memory, size_t size)
     // not enough space, must relocate
     pthread_mutex_unlock(&heap_lock);
 
-    void *new_allocated = balloc(size);
+    void *new_allocated = salloc(size);
     if (new_allocated == NULL)
     {
         return NULL;
@@ -143,7 +143,7 @@ void *brealloc(void *memory, size_t size)
     memcpy(new_allocated, memory, current_size);
 
     // free old chunk
-    bfree(original_chunk->payload);
+    sfree(original_chunk->payload);
     return new_allocated;
 }
 static heapchunk *increase_heap(size_t required_space)
