@@ -26,9 +26,9 @@
 
 typedef struct heapchunk
 {
+    size_t canary;
     size_t size;
     bool is_inuse;
-    size_t canary;
 
     // next,prev pointers aren't needed when chunk is being used
     // Therfore, they can be replaced with the data when allocated

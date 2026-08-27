@@ -138,14 +138,13 @@ void *srealloc(void *memory, size_t size)
     {
         return NULL;
     }
-
-    // copy old chunk's data to the new allocated space
     memcpy(new_allocated, memory, current_size);
 
     // free old chunk
     sfree(original_chunk->payload);
     return new_allocated;
 }
+
 static heapchunk *increase_heap(size_t required_space)
 {
     size_t page_size = sysconf(_SC_PAGESIZE);
