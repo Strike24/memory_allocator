@@ -2,42 +2,42 @@
 #include "allocator.h"
 #include <stdio.h>
 
-// int main()
-// {
-//     char *str = (char *)salloc(8);
-//     if (str == NULL)
-//     {
-//         fprintf(stderr, "Allocation failed!\n");
-//         return 1;
-//     }
-
-//     fgets(str, 100, stdin);
-//     printf("Data: %s\n", str);
-
-//     sfree(str);
-//     printf("Data after free: %s\n", str);
-// }
-
 int main()
 {
-    char *str = (char *)salloc(64);
+    char *str = (char *)salloc(8);
     if (str == NULL)
     {
         fprintf(stderr, "Allocation failed!\n");
         return 1;
     }
 
-    strcpy(str, "Hello Allocator!");
+    fgets(str, 100, stdin);
     printf("Data: %s\n", str);
-    print_debug();
-
-    str = srealloc(str, 16);
-    printf("Data after realloc: %s\n", str);
-    print_debug();
 
     sfree(str);
     printf("Data after free: %s\n", str);
 }
+
+// int main()
+// {
+//     char *str = (char *)salloc(64);
+//     if (str == NULL)
+//     {
+//         fprintf(stderr, "Allocation failed!\n");
+//         return 1;
+//     }
+
+//     strcpy(str, "Hello Allocator!");
+//     printf("Data: %s\n", str);
+//     print_debug();
+
+//     str = srealloc(str, 16);
+//     printf("Data after realloc: %s\n", str);
+//     print_debug();
+
+//     sfree(str);
+//     printf("Data after free: %s\n", str);
+// }
 
 // int main()
 // {

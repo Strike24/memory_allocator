@@ -124,11 +124,16 @@ heapchunk *next_phyiscal_chunk(heapchunk *current)
 
     // get next physical chunk in memory
     heapchunk *right_neighbor = (heapchunk *)((char *)current + HEADER_SIZE + current_size);
+
     if (right_neighbor != NULL && right_neighbor->canary != calculate_canary(right_neighbor))
     {
         fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
         abort();
     }
+
+    // make sure that chunk is not the boundary
+    if ((right_neighbor->size == 0) & (right_neighbor->is_inuse))
+        return NULL;
 
     return right_neighbor;
 }

@@ -44,7 +44,7 @@ typedef struct heapchunk
     };
 } heapchunk;
 
-#define HEADER_SIZE offsetof(heapchunk, payload)
+#define HEADER_SIZE 24
 
 typedef struct heapinfo
 {

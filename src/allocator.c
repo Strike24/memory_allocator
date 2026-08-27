@@ -187,13 +187,22 @@ static int init_heap(heapinfo *heap)
     size_t arena_size = ARENA_SIZE;
     void *mapped_memory = request_space(arena_size);
 
-    // Init headblock for the heap
+    if (!mapped_memory)
+        return -1;
+
+    // Init head for the heap
     heapchunk *first = (heapchunk *)mapped_memory;
     first->is_inuse = false;
-    first->size = arena_size - HEADER_SIZE; // size left without the heapchunk header
+    first->size = arena_size - (2 * HEADER_SIZE); // reserve size for head chunk header and boundary chunk header
     first->canary = calculate_canary(first);
-
     add_to_bin(first);
+
+    // Boundary chunk to avoid accessing after the arena bounds
+    heapchunk *boundary = (heapchunk *)((char *)mapped_memory + arena_size - HEADER_SIZE);
+    boundary->size = 0;
+    boundary->is_inuse = true;
+    boundary->canary = calculate_canary(boundary);
+
     heap->initalized = true;
 
     printf("MMAP mapped page starting at: %p\n", mapped_memory);
@@ -212,9 +221,9 @@ static void advise_free(heapchunk *chunk)
     uintptr_t pages_start_address = ROUND_UP_PAGE(payload_start, PAGE_SIZE);
     uintptr_t pages_end_address = ROUND_DOWN_PAGE(payload_end, PAGE_SIZE);
 
-    int pages_length = pages_end_address - pages_start_address;
+    size_t pages_length = pages_end_address - pages_start_address;
     // if one or more pages fit in the chunk's payload,
-    if ((pages_start_address < pages_end_address) && (pages_length >= REQ_PAGES_TO_FREE * PAGE_SIZE))
+    if ((pages_start_address < pages_end_address) && (pages_length >= (size_t)(REQ_PAGES_TO_FREE * PAGE_SIZE)))
     {
         if (madvise((void *)pages_start_address, pages_length, MADV_FREE) == -1)
             perror("madvise failed");
