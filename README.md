@@ -3,6 +3,8 @@
 Custom memory allocator (malloc) implemented in C.
 salloc - secure allocator :)
 
+> I've documented the process of building this allocator and what I learned on my [blog](https://strike24.github.io/posts/projects/building-a-memory-allocator/)
+
 ## How it works
 
 A **"Segregated Bins"** allocator that uses a free list to manage allocated memory chunks.
