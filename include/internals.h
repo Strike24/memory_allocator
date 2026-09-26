@@ -12,7 +12,7 @@
 #include <pthread.h>
 
 // used to verify a chunk's integrety
-#define MAGIC_NUM 0xDEADBEEF
+#define MAGIC_NUM 0xBEEF
 #define OVERWRITE_HEX 0xDE
 #define NUM_BINS 10
 #define MIN_CHUNK_SIZE 16
@@ -23,12 +23,10 @@
 
 typedef struct heapchunk
 {
-    size_t canary;
-    size_t size;
+    uint32_t canary;
     bool is_inuse;
+    size_t size;
 
-    // next,prev pointers aren't needed when chunk is being used
-    // Therfore, they can be replaced with the data when allocated
     union
     {
         struct
@@ -41,6 +39,9 @@ typedef struct heapchunk
     };
 } heapchunk;
 
+// next,prev pointers aren't needed when chunk is being used
+// Therfore, they can be replaced with the data when allocated
+
 #define HEADER_SIZE 24
 
 typedef struct heapinfo
@@ -52,7 +53,7 @@ typedef struct heapinfo
 
 // shared globals
 extern heapinfo heap;
-extern size_t global_cookie;
+extern uint32_t global_cookie;
 
 // chunks.c
 void add_to_bin(heapchunk *chunk);
@@ -65,33 +66,11 @@ int get_bin_index(size_t size);
 
 // security.c
 void init_canary(void);
-size_t calculate_canary(heapchunk *chunk);
+uint32_t calculate_canary(heapchunk *chunk);
 heapchunk *get_validated_chunk(void *memory);
 
-uintptr_t round_down_page(uintptr_t n, size_t page_size)
-{
-    size_t remainder = n % page_size;
-    return n - remainder;
-}
-
-uintptr_t round_up_page(uintptr_t n, size_t page_size)
-{
-    size_t remainder = n % page_size;
-
-    if (remainder == 0)
-        return n;
-
-    return (n - remainder) + page_size;
-}
-
-size_t align_size(size_t size, size_t alignment)
-{
-    size_t remainder = size % alignment;
-
-    if (remainder == 0)
-        return size;
-
-    return (size - remainder) + alignment;
-}
+uintptr_t round_down_page(uintptr_t n, size_t page_size);
+uintptr_t round_up_page(uintptr_t n, size_t page_size);
+size_t align_size(size_t size, size_t alignment);
 
 #endif // INTERNALS_H

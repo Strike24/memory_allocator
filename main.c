@@ -12,7 +12,9 @@ int main()
     }
 
     fgets(str, 100, stdin);
-    printf("Data: %s\n", str);
+    printf("Data: %s", str);
+
+    printf("Pointer to allocated memory: %p\n\n", str);
 
     sfree(str);
     printf("Data after free: %s\n", str);

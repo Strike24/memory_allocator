@@ -31,11 +31,11 @@ void init_canary()
     else
     {
         // Fallback when urandom doesnt work
-        global_cookie = MAGIC_NUM ^ (size_t)&global_cookie;
+        global_cookie = (uint32_t)(MAGIC_NUM ^ (size_t)&global_cookie);
     }
 }
 
-inline size_t calculate_canary(heapchunk *chunk)
+inline uint32_t calculate_canary(heapchunk *chunk)
 {
-    return global_cookie ^ (size_t)chunk;
+    return (uint32_t)(global_cookie ^ (size_t)chunk);
 }

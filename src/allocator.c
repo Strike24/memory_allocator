@@ -9,7 +9,7 @@ static heapchunk *increase_heap(size_t required_space);
 static void advise_free(heapchunk *chunk);
 
 heapinfo heap = {0};
-size_t global_cookie = 0;
+uint32_t global_cookie = 0;
 static pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to allow thread-safe allocation
 
 void *salloc(size_t size)
@@ -52,6 +52,8 @@ void *salloc(size_t size)
 
     // Skip over the header, return the memory chunk
     void *allocated_memory = (void *)(free->payload);
+
+    _Static_assert(offsetof(heapchunk, payload) % 16 == 0, "chunk misaligned");
 
     pthread_mutex_unlock(&heap_lock);
     return allocated_memory;
@@ -246,4 +248,32 @@ void print_debug()
         }
         printf("  * Bucket #%d - %d\n", i, count);
     }
+}
+
+// Alignment functions
+
+uintptr_t round_down_page(uintptr_t n, size_t page_size)
+{
+    size_t remainder = n % page_size;
+    return n - remainder;
+}
+
+uintptr_t round_up_page(uintptr_t n, size_t page_size)
+{
+    size_t remainder = n % page_size;
+
+    if (remainder == 0)
+        return n;
+
+    return (n - remainder) + page_size;
+}
+
+size_t align_size(size_t size, size_t alignment)
+{
+    size_t remainder = size % alignment;
+
+    if (remainder == 0)
+        return size;
+
+    return (size - remainder) + alignment;
 }
