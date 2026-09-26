@@ -25,7 +25,7 @@ void init_canary()
     FILE *urandom = fopen("/dev/urandom", "r");
     if (urandom != NULL)
     {
-        fread(&global_cookie, sizeof(size_t), 1, urandom);
+        fread(&global_cookie, sizeof(uint32_t), 1, urandom);
         fclose(urandom);
     }
     else
