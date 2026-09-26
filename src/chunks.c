@@ -18,8 +18,10 @@ void split_chunk(heapchunk *avail_chunk, size_t requested_size)
     new_chunk->size = remainder_size;
     new_chunk->is_inuse = false;
     new_chunk->canary = calculate_canary(new_chunk);
+    new_chunk->prev_inuse = true;
 
     // connect new_chunk to the freelist
+    mark_chunk_free(new_chunk);
     add_to_bin(new_chunk);
 }
 
@@ -43,6 +45,22 @@ heapchunk *find_free_chunk(size_t size)
     }
 
     return NULL;
+}
+
+void mark_chunk_free(heapchunk *chunk)
+{
+    if (chunk == NULL)
+        return;
+
+    chunk->is_inuse = false;
+
+    // add a (size_t) footer that indicates the size of the unallocated chunk
+    size_t *footer = (size_t *)((char *)chunk + HEADER_SIZE + chunk->size - sizeof(size_t));
+    *footer = chunk->size;
+
+    heapchunk *next = next_phyiscal_chunk(chunk);
+    if (next != NULL)
+        next->prev_inuse = false;
 }
 
 void add_to_bin(heapchunk *chunk)
@@ -106,13 +124,47 @@ void remove_from_bin(heapchunk *chunk)
     heap.avail -= chunk->size;
 }
 
-void merge_adj_chunks(heapchunk *original, heapchunk *next)
+heapchunk *merge_adj_chunks(heapchunk *original, heapchunk *next, heapchunk *prev)
 {
-    remove_from_bin(next);
+    heapchunk *merged = original;
 
-    // original now has next's size, and the size of next's header as its in use anymore
-    size_t total = original->size + next->size + HEADER_SIZE;
-    original->size = total;
+    if (next != NULL && next->is_inuse == false)
+    {
+        remove_from_bin(next);
+
+        // original now has next's size, and the size of next's header as its in use anymore
+        original->size = original->size + next->size + HEADER_SIZE;
+
+        merged = original;
+    }
+
+    if (prev != NULL && prev->is_inuse == false)
+    {
+        remove_from_bin(prev);
+
+        prev->size = prev->size + original->size + HEADER_SIZE;
+
+        merged = prev;
+    }
+
+    return merged;
+}
+
+heapchunk *prev_phyiscal_chunk(heapchunk *current)
+{
+    if (current == NULL || (current->prev_inuse == true))
+        return NULL;
+
+    size_t prev_size = *(size_t *)((char *)current - sizeof(size_t));
+
+    heapchunk *left_neighbor = (heapchunk *)((char *)current - (prev_size + HEADER_SIZE));
+
+    if (left_neighbor != NULL && left_neighbor->canary != calculate_canary(left_neighbor))
+    {
+        return NULL;
+    }
+
+    return left_neighbor;
 }
 
 heapchunk *next_phyiscal_chunk(heapchunk *current)
@@ -127,12 +179,11 @@ heapchunk *next_phyiscal_chunk(heapchunk *current)
 
     if (right_neighbor != NULL && right_neighbor->canary != calculate_canary(right_neighbor))
     {
-        fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
-        abort();
+        return NULL;
     }
 
     // make sure that chunk is not the boundary
-    if ((right_neighbor->size == 0) & (right_neighbor->is_inuse))
+    if ((right_neighbor->size == 0) && (right_neighbor->is_inuse))
         return NULL;
 
     return right_neighbor;

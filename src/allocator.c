@@ -68,84 +68,82 @@ void sfree(void *memory)
 
     heapchunk *chunk = get_validated_chunk(memory);
 
-    chunk->is_inuse = false;
-
-    // overwrite old data to prevent uaf's
+    // poisoning the freed memory to try and catch uaf's
     memset(chunk->payload, OVERWRITE_HEX, chunk->size);
 
-    // merge next phyiscal chunk (if free and exists) to avoid fragmentation
+    // merge adjecent chunks (if are free and exist) to avoid fragmentation
     heapchunk *next = next_phyiscal_chunk(chunk);
-    if (next != NULL && next->is_inuse == false)
-    {
-        merge_adj_chunks(chunk, next);
-    }
+    heapchunk *prev = prev_phyiscal_chunk(chunk);
+    // next,prev can be null, merge will take care of that
+    heapchunk *merged = merge_adj_chunks(chunk, next, prev);
 
+    mark_chunk_free(merged);
     // Add back to freelist
-    add_to_bin(chunk);
-    advise_free(chunk);
+    add_to_bin(merged);
+    advise_free(merged);
 
     pthread_mutex_unlock(&heap_lock);
     return;
 }
 
-void *srealloc(void *memory, size_t size)
-{
-    pthread_mutex_lock(&heap_lock);
-    if (memory == NULL)
-    {
-        pthread_mutex_unlock(&heap_lock);
-        return salloc(size);
-    }
+// void *srealloc(void *memory, size_t size)
+// {
+//     pthread_mutex_lock(&heap_lock);
+//     if (memory == NULL)
+//     {
+//         pthread_mutex_unlock(&heap_lock);
+//         return salloc(size);
+//     }
 
-    if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
-        size = MIN_CHUNK_SIZE;
+//     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
+//         size = MIN_CHUNK_SIZE;
 
-    // Align chunk size
-    size = align_size(size, ALIGNMENT);
+//     // Align chunk size
+//     size = align_size(size, ALIGNMENT);
 
-    heapchunk *original_chunk = get_validated_chunk(memory);
+//     heapchunk *original_chunk = get_validated_chunk(memory);
 
-    size_t current_size = original_chunk->size;
+//     size_t current_size = original_chunk->size;
 
-    // -- shrinking / not changing
-    if (size <= current_size)
-    {
-        split_chunk(original_chunk, size);
+//     // -- shrinking / not changing
+//     if (size <= current_size)
+//     {
+//         split_chunk(original_chunk, size);
 
-        pthread_mutex_unlock(&heap_lock);
-        return (void *)original_chunk->payload;
-    }
+//         pthread_mutex_unlock(&heap_lock);
+//         return (void *)original_chunk->payload;
+//     }
 
-    // -- growing
-    heapchunk *next = next_phyiscal_chunk(original_chunk);
+//     // -- growing
+//     heapchunk *next = next_phyiscal_chunk(original_chunk);
 
-    // in place?
-    if (next != NULL && next->is_inuse == false &&
-        (current_size + HEADER_SIZE + next->size >= size))
-    {
-        merge_adj_chunks(original_chunk, next);
+//     // in place?
+//     if (next != NULL && next->is_inuse == false &&
+//         (current_size + HEADER_SIZE + next->size >= size))
+//     {
+//         merge_adj_chunks(original_chunk, next);
 
-        // attempt to split if enough space
-        split_chunk(original_chunk, size);
+//         // attempt to split if enough space
+//         split_chunk(original_chunk, size);
 
-        pthread_mutex_unlock(&heap_lock);
-        return (void *)original_chunk->payload;
-    }
+//         pthread_mutex_unlock(&heap_lock);
+//         return (void *)original_chunk->payload;
+//     }
 
-    // not enough space, must relocate
-    pthread_mutex_unlock(&heap_lock);
+//     // not enough space, must relocate
+//     pthread_mutex_unlock(&heap_lock);
 
-    void *new_allocated = salloc(size);
-    if (new_allocated == NULL)
-    {
-        return NULL;
-    }
-    memcpy(new_allocated, memory, current_size);
+//     void *new_allocated = salloc(size);
+//     if (new_allocated == NULL)
+//     {
+//         return NULL;
+//     }
+//     memcpy(new_allocated, memory, current_size);
 
-    // free old chunk
-    sfree(original_chunk->payload);
-    return new_allocated;
-}
+//     // free old chunk
+//     sfree(original_chunk->payload);
+//     return new_allocated;
+// }
 
 static heapchunk *increase_heap(size_t required_space)
 {
@@ -159,11 +157,11 @@ static heapchunk *increase_heap(size_t required_space)
     if (new_chunk == NULL)
         return NULL;
 
-    new_chunk->is_inuse = false;
     new_chunk->canary = calculate_canary(new_chunk);
-
     new_chunk->size = bytes_to_request - HEADER_SIZE;
+    new_chunk->prev_inuse = true;
 
+    mark_chunk_free(new_chunk);
     // connect new chunk to the freelist
     add_to_bin(new_chunk);
     return new_chunk;
@@ -194,9 +192,11 @@ static int init_heap(heapinfo *heap)
 
     // Init head for the heap
     heapchunk *first = (heapchunk *)mapped_memory;
-    first->is_inuse = false;
     first->size = arena_size - (2 * HEADER_SIZE); // reserve size for head chunk header and boundary chunk header
     first->canary = calculate_canary(first);
+    first->prev_inuse = true;
+
+    mark_chunk_free(first);
     add_to_bin(first);
 
     // Boundary chunk to avoid accessing after the arena bounds
