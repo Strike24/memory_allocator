@@ -28,7 +28,7 @@ void *salloc(size_t size)
         size = MIN_CHUNK_SIZE;
 
     // Align chunk size
-    size = ALIGN(size);
+    size = align_size(size, ALIGNMENT);
 
     // loop over free memory chunks to see if size is available
     heapchunk *free = find_free_chunk(size);
@@ -99,7 +99,7 @@ void *srealloc(void *memory, size_t size)
         size = MIN_CHUNK_SIZE;
 
     // Align chunk size
-    size = ALIGN(size);
+    size = align_size(size, ALIGNMENT);
 
     heapchunk *original_chunk = get_validated_chunk(memory);
 
@@ -218,8 +218,8 @@ static void advise_free(heapchunk *chunk)
     if (payload_end == 0 || payload_start == 0)
         return;
 
-    uintptr_t pages_start_address = ROUND_UP_PAGE(payload_start, PAGE_SIZE);
-    uintptr_t pages_end_address = ROUND_DOWN_PAGE(payload_end, PAGE_SIZE);
+    uintptr_t pages_start_address = round_up_page(payload_start, PAGE_SIZE);
+    uintptr_t pages_end_address = round_down_page(payload_end, PAGE_SIZE);
 
     size_t pages_length = pages_end_address - pages_start_address;
     // if one or more pages fit in the chunk's payload,

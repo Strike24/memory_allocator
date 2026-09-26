@@ -16,10 +16,7 @@
 #define OVERWRITE_HEX 0xDE
 #define NUM_BINS 10
 #define MIN_CHUNK_SIZE 16
-#define ROUND_DOWN_PAGE(n, page_size) ((n) & ~((page_size) - 1))
-#define ROUND_UP_PAGE(n, page_size) (((n) + (page_size) - 1) & ~((page_size) - 1))
 #define ALIGNMENT 16
-#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1))
 #define ARENA_SIZE (2 * 1024 * 1024) // 2MB
 #define PAGE_SIZE sysconf(_SC_PAGESIZE)
 #define REQ_PAGES_TO_FREE 1
@@ -70,5 +67,31 @@ int get_bin_index(size_t size);
 void init_canary(void);
 size_t calculate_canary(heapchunk *chunk);
 heapchunk *get_validated_chunk(void *memory);
+
+uintptr_t round_down_page(uintptr_t n, size_t page_size)
+{
+    size_t remainder = n % page_size;
+    return n - remainder;
+}
+
+uintptr_t round_up_page(uintptr_t n, size_t page_size)
+{
+    size_t remainder = n % page_size;
+
+    if (remainder == 0)
+        return n;
+
+    return (n - remainder) + page_size;
+}
+
+size_t align_size(size_t size, size_t alignment)
+{
+    size_t remainder = size % alignment;
+
+    if (remainder == 0)
+        return size;
+
+    return (size - remainder) + alignment;
+}
 
 #endif // INTERNALS_H
