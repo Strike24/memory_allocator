@@ -33,7 +33,7 @@ void abort_doublefree()
 void init_canary()
 {
     FILE *urandom = fopen("/dev/urandom", "r");
-    if ((urandom != NULL) && (fread(&global_cookie, sizeof(size_t), 1, urandom) == 1))
+    if ((urandom != NULL) && (fread(&global_cookie, sizeof(uint32_t), 1, urandom) == 1))
     {
         fclose(urandom);
     }
