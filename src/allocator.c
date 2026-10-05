@@ -21,11 +21,20 @@ void *salloc(size_t size)
     {
         int rc = init_heap(&heap);
         if (rc != 0)
+        {
+            pthread_mutex_unlock(&heap_lock);
             return NULL;
+        }
     }
 
     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
         size = MIN_CHUNK_SIZE;
+
+    if (size > MAX_CHUNK_SIZE)
+    {
+        pthread_mutex_unlock(&heap_lock);
+        return NULL;
+    }
 
     // Align chunk size
     size = align_size(size, ALIGNMENT);
@@ -38,7 +47,6 @@ void *salloc(size_t size)
         free = increase_heap(size);
         if (free == NULL)
         {
-            perror("No available memory left or error occured.\n");
             pthread_mutex_unlock(&heap_lock);
             return NULL;
         }
@@ -69,11 +77,11 @@ void sfree(void *memory)
     heapchunk *chunk = get_validated_chunk(memory);
 
     // poisoning the freed memory to try and catch uaf's
-    memset(chunk->payload, OVERWRITE_HEX, chunk->size);
+    // memset(chunk->payload, OVERWRITE_HEX, chunk->size);
 
     // merge adjecent chunks (if are free and exist) to avoid fragmentation
-    heapchunk *next = next_phyiscal_chunk(chunk);
-    heapchunk *prev = prev_phyiscal_chunk(chunk);
+    heapchunk *next = next_physical_chunk(chunk);
+    heapchunk *prev = prev_physical_chunk(chunk);
     // next,prev can be null, merge will take care of that
     heapchunk *merged = merge_adj_chunks(chunk, next, prev);
 
@@ -115,7 +123,7 @@ void sfree(void *memory)
 //     }
 
 //     // -- growing
-//     heapchunk *next = next_phyiscal_chunk(original_chunk);
+//     heapchunk *next = next_physical_chunk(original_chunk);
 
 //     // in place?
 //     if (next != NULL && next->is_inuse == false &&
@@ -150,20 +158,31 @@ static heapchunk *increase_heap(size_t required_space)
     size_t page_size = sysconf(_SC_PAGESIZE);
     size_t total_required = required_space + HEADER_SIZE;
 
-    size_t num_of_pages = (total_required + page_size - 1) / page_size;
-    size_t bytes_to_request = num_of_pages * page_size;
-
-    heapchunk *new_chunk = (heapchunk *)request_space(bytes_to_request);
-    if (new_chunk == NULL)
+    if (total_required > MAX_CHUNK_SIZE)
         return NULL;
 
+    size_t num_of_pages = (total_required + page_size - 1) / page_size;
+    size_t arena_size = num_of_pages * page_size;
+
+    void *mapped_memory = request_space(arena_size);
+    if (mapped_memory == NULL)
+        return NULL;
+
+    heapchunk *new_chunk = (heapchunk *)(mapped_memory);
+
+    new_chunk->size = arena_size - (2 * HEADER_SIZE); // save space for one chunk and one boundary
     new_chunk->canary = calculate_canary(new_chunk);
-    new_chunk->size = bytes_to_request - HEADER_SIZE;
     new_chunk->prev_inuse = true;
+
+    heapchunk *boundary = (heapchunk *)((char *)mapped_memory + arena_size - HEADER_SIZE);
+    boundary->size = 0;
+    boundary->is_inuse = true;
+    boundary->canary = calculate_canary(boundary);
 
     mark_chunk_free(new_chunk);
     // connect new chunk to the freelist
     add_to_bin(new_chunk);
+
     return new_chunk;
 }
 
@@ -187,7 +206,7 @@ static int init_heap(heapinfo *heap)
     size_t arena_size = ARENA_SIZE;
     void *mapped_memory = request_space(arena_size);
 
-    if (!mapped_memory)
+    if (mapped_memory == NULL)
         return -1;
 
     // Init head for the heap
@@ -196,18 +215,16 @@ static int init_heap(heapinfo *heap)
     first->canary = calculate_canary(first);
     first->prev_inuse = true;
 
-    mark_chunk_free(first);
-    add_to_bin(first);
-
     // Boundary chunk to avoid accessing after the arena bounds
     heapchunk *boundary = (heapchunk *)((char *)mapped_memory + arena_size - HEADER_SIZE);
     boundary->size = 0;
     boundary->is_inuse = true;
     boundary->canary = calculate_canary(boundary);
 
-    heap->initalized = true;
+    mark_chunk_free(first);
+    add_to_bin(first);
 
-    printf("MMAP mapped page starting at: %p\n", mapped_memory);
+    heap->initalized = true;
 
     return 0;
 }

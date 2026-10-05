@@ -36,6 +36,12 @@ heapchunk *find_free_chunk(size_t size)
         current = heap.bins[i];
         while (current != NULL)
         {
+            // why not validate chunk's canary while we are at it
+            if (current->canary != calculate_canary(current))
+            {
+                abort_canary();
+            }
+
             if (current->is_inuse == false && current->size >= size)
             {
                 return current;
@@ -58,7 +64,7 @@ void mark_chunk_free(heapchunk *chunk)
     size_t *footer = (size_t *)((char *)chunk + HEADER_SIZE + chunk->size - sizeof(size_t));
     *footer = chunk->size;
 
-    heapchunk *next = next_phyiscal_chunk(chunk);
+    heapchunk *next = next_physical_chunk(chunk);
     if (next != NULL)
         next->prev_inuse = false;
 }
@@ -150,7 +156,7 @@ heapchunk *merge_adj_chunks(heapchunk *original, heapchunk *next, heapchunk *pre
     return merged;
 }
 
-heapchunk *prev_phyiscal_chunk(heapchunk *current)
+heapchunk *prev_physical_chunk(heapchunk *current)
 {
     if (current == NULL || (current->prev_inuse == true))
         return NULL;
@@ -167,7 +173,7 @@ heapchunk *prev_phyiscal_chunk(heapchunk *current)
     return left_neighbor;
 }
 
-heapchunk *next_phyiscal_chunk(heapchunk *current)
+heapchunk *next_physical_chunk(heapchunk *current)
 {
     if (current == NULL)
         return NULL;
@@ -177,14 +183,14 @@ heapchunk *next_phyiscal_chunk(heapchunk *current)
     // get next physical chunk in memory
     heapchunk *right_neighbor = (heapchunk *)((char *)current + HEADER_SIZE + current_size);
 
-    if (right_neighbor != NULL && right_neighbor->canary != calculate_canary(right_neighbor))
-    {
-        return NULL;
-    }
-
     // make sure that chunk is not the boundary
     if ((right_neighbor->size == 0) && (right_neighbor->is_inuse))
         return NULL;
+
+    if (right_neighbor->canary != calculate_canary(right_neighbor))
+    {
+        abort_canary();
+    }
 
     return right_neighbor;
 }

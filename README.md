@@ -23,3 +23,9 @@ Heap Mitigations currently implemented:
 - Heap Canaries ("Security Cookies"):
   canary value at the header of each chunk to detect buffer overflows. If the canary is altered, the allocator aborts the program.
   The canary value is generated using a random number generator at the start of the program and is unique for each run.
+
+### To Do
+
+- add arena regions and make it clearer where are the bounds
+- add safe linking
+- add tcache (currently 1 thread only)
