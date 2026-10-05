@@ -16,6 +16,7 @@
 #define OVERWRITE_HEX 0xDE
 #define NUM_BINS 10
 #define MIN_CHUNK_SIZE 16
+#define MAX_CHUNK_SIZE (SIZE_MAX / 2)
 #define ALIGNMENT 16
 #define ARENA_SIZE (2 * 1024 * 1024) // 2MB
 #define PAGE_SIZE sysconf(_SC_PAGESIZE)
@@ -25,8 +26,8 @@ typedef struct heapchunk
 {
     uint32_t canary;
     bool is_inuse;
+    bool prev_inuse; // used for left coalecing
     size_t size;
-
     union
     {
         struct
@@ -42,7 +43,7 @@ typedef struct heapchunk
 // next,prev pointers aren't needed when chunk is being used
 // Therfore, they can be replaced with the data when allocated
 
-#define HEADER_SIZE 24
+#define HEADER_SIZE (sizeof(heapchunk) - sizeof(uint8_t[0]))
 
 typedef struct heapinfo
 {
@@ -59,8 +60,11 @@ extern uint32_t global_cookie;
 void add_to_bin(heapchunk *chunk);
 void remove_from_bin(heapchunk *chunk);
 void split_chunk(heapchunk *avail_chunk, size_t requested_size);
-void merge_adj_chunks(heapchunk *original, heapchunk *next);
-heapchunk *next_phyiscal_chunk(heapchunk *current);
+void mark_chunk_free(heapchunk *chunk);
+heapchunk *merge_adj_chunks(heapchunk *original, heapchunk *next, heapchunk *prev);
+
+heapchunk *next_physical_chunk(heapchunk *current);
+heapchunk *prev_physical_chunk(heapchunk *current);
 heapchunk *find_free_chunk(size_t size);
 int get_bin_index(size_t size);
 
@@ -68,6 +72,8 @@ int get_bin_index(size_t size);
 void init_canary(void);
 uint32_t calculate_canary(heapchunk *chunk);
 heapchunk *get_validated_chunk(void *memory);
+void abort_canary();
+void abort_doublefree();
 
 uintptr_t round_down_page(uintptr_t n, size_t page_size);
 uintptr_t round_up_page(uintptr_t n, size_t page_size);

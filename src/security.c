@@ -9,29 +9,38 @@ heapchunk *get_validated_chunk(void *memory)
 
     if (chunk->canary != calculate_canary(chunk))
     {
-        fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
-        abort();
+        abort_canary();
     }
     if (chunk->is_inuse == false)
     {
-        fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");
-        abort();
+        abort_doublefree();
     }
     return chunk;
+}
+
+void abort_canary()
+{
+    fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
+    abort();
+}
+
+void abort_doublefree()
+{
+    fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");
+    abort();
 }
 
 void init_canary()
 {
     FILE *urandom = fopen("/dev/urandom", "r");
-    if (urandom != NULL)
+    if ((urandom != NULL) && (fread(&global_cookie, sizeof(uint32_t), 1, urandom) == 1))
     {
-        fread(&global_cookie, sizeof(uint32_t), 1, urandom);
         fclose(urandom);
     }
     else
     {
-        // Fallback when urandom doesnt work
-        global_cookie = (uint32_t)(MAGIC_NUM ^ (size_t)&global_cookie);
+        perror("/dev/urandom failed to be read");
+        abort();
     }
 }
 
