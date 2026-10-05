@@ -94,64 +94,71 @@ void sfree(void *memory)
     return;
 }
 
-// void *srealloc(void *memory, size_t size)
-// {
-//     pthread_mutex_lock(&heap_lock);
-//     if (memory == NULL)
-//     {
-//         pthread_mutex_unlock(&heap_lock);
-//         return salloc(size);
-//     }
+void *srealloc(void *memory, size_t size)
+{
+    pthread_mutex_lock(&heap_lock);
+    if (memory == NULL)
+    {
+        pthread_mutex_unlock(&heap_lock);
+        return salloc(size);
+    }
 
-//     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
-//         size = MIN_CHUNK_SIZE;
+    if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
+        size = MIN_CHUNK_SIZE;
 
-//     // Align chunk size
-//     size = align_size(size, ALIGNMENT);
+    if (size > MAX_CHUNK_SIZE)
+    {
+        pthread_mutex_unlock(&heap_lock);
+        return NULL;
+    }
 
-//     heapchunk *original_chunk = get_validated_chunk(memory);
+    // Align chunk size
+    size = align_size(size, ALIGNMENT);
 
-//     size_t current_size = original_chunk->size;
+    heapchunk *original_chunk = get_validated_chunk(memory);
 
-//     // -- shrinking / not changing
-//     if (size <= current_size)
-//     {
-//         split_chunk(original_chunk, size);
+    size_t current_size = original_chunk->size;
 
-//         pthread_mutex_unlock(&heap_lock);
-//         return (void *)original_chunk->payload;
-//     }
+    // -- shrinking / not changing
+    if (size <= current_size)
+    {
+        split_chunk(original_chunk, size);
 
-//     // -- growing
-//     heapchunk *next = next_physical_chunk(original_chunk);
+        pthread_mutex_unlock(&heap_lock);
+        return (void *)original_chunk->payload;
+    }
 
-//     // in place?
-//     if (next != NULL && next->is_inuse == false &&
-//         (current_size + HEADER_SIZE + next->size >= size))
-//     {
-//         merge_adj_chunks(original_chunk, next);
+    // -- growing
+    heapchunk *next = next_physical_chunk(original_chunk);
 
-//         // attempt to split if enough space
-//         split_chunk(original_chunk, size);
+    // in place?
+    if (next != NULL && next->is_inuse == false &&
+        (current_size + HEADER_SIZE + next->size >= size))
+    {
+        // merge to expand to the right
+        merge_adj_chunks(original_chunk, next, NULL);
 
-//         pthread_mutex_unlock(&heap_lock);
-//         return (void *)original_chunk->payload;
-//     }
+        // attempt to split if enough space
+        split_chunk(original_chunk, size);
 
-//     // not enough space, must relocate
-//     pthread_mutex_unlock(&heap_lock);
+        pthread_mutex_unlock(&heap_lock);
+        return (void *)original_chunk->payload;
+    }
 
-//     void *new_allocated = salloc(size);
-//     if (new_allocated == NULL)
-//     {
-//         return NULL;
-//     }
-//     memcpy(new_allocated, memory, current_size);
+    // not enough space, must relocate
+    pthread_mutex_unlock(&heap_lock);
 
-//     // free old chunk
-//     sfree(original_chunk->payload);
-//     return new_allocated;
-// }
+    void *new_allocated = salloc(size);
+    if (new_allocated == NULL)
+    {
+        return NULL;
+    }
+    memcpy(new_allocated, memory, current_size);
+
+    // free old chunk
+    sfree(original_chunk->payload);
+    return new_allocated;
+}
 
 static heapchunk *increase_heap(size_t required_space)
 {
