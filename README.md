@@ -1,31 +1,40 @@
-# Secure Memory Allocator
+# Salloc - Secure Allocator
 
-Custom memory allocator (malloc) implemented in C.
-salloc - secure allocator :)
+A custom **secure** memory allocator in C with heap hardening, size-class bins, chunk splitting and bidirectional coalescing. Built to explore allocator internals and heap security.
+Built with the knowledge I aquired from the heap module at [pwn.college](https://pwn.college/).
 
-> I've documented the process of building this allocator and what I learned on my [blog](https://strike24.github.io/posts/projects/building-a-memory-allocator/)
-> Keep in mind, this may be slightly outdated as I update the allocator from time to time ;)
+I wrote about building it here: [Building a Memory Allocator](https://strike24.github.io/posts/projects/building-a-memory-allocator/). The post is a bit older than the code, so trust the code.
 
 ## How it works
 
-A **"Segregated Bins"** allocator that uses a free list to manage allocated memory chunks.
-The bins are organized by size classes, each containing a list of free aligned memory chunks, assuring O(1) allocation complexity (At least in the average case)
-The allocator uses a **first-fit** strategy to find a simmliar sized chunk for allocation, and it splits larger chunks when necessary. When a chunk is freed, it is added back to the free list and is merged with adjacent free chunks if possible.
+- Memory comes from 2MB `mmap` arenas, carved into chunks with a small header.
+- Free chunks sit in 10 size-class bins (powers of two), doubly linked, first fit.
+- Big chunks get split on alloc. Free chunks get merged with both neighbours on free.
+- Big freed ranges are handed back to the OS with `madvise(MADV_FREE)`.
+- One global mutex around alloc and free. Simple and coarse-grained.
 
-The allocator also includes a mutex lock to ensure thread safety during allocation and deallocation.
+## Hardening
 
-Heap Mitigations currently implemented:
+- **Canaries:** each chunk header has a 32-bit canary (random cookie XOR the chunk address). Checked on free, on the next neighbour, and while searching bins. A bad canary there aborts.
+- **Safe unlinking:** `prev->next` and `next->prev` are checked before a chunk leaves a bin.
+- **Double free:** freeing a chunk that's already free aborts.
+- **Boundary chunk:** every arena ends with a zero-size chunk so walking to the next neighbour stops at the end of the arena.
+- **Safe linking**: Soon.
 
-- Safe Unlinking & Double Free:
-  integrity checking of the free list pointers before unlinking to ensure they did not get altered, and checking if a chunk is already freed before adding it back to the free list, preventing double free vulnerabilities.
-- Use-After-Free:
-  overwrite freed chunks with garbage data to prevent use-after-free vulnerabilities.
-- Heap Canaries ("Security Cookies"):
-  canary value at the header of each chunk to detect buffer overflows. If the canary is altered, the allocator aborts the program.
-  The canary value is generated using a random number generator at the start of the program and is unique for each run.
+## Build
 
-### To Do
+```
+make allocator      # with hardening
+make notsecured     # same allocator, checks off (for comparing exploits)
+```
 
-- add arena regions and make it clearer where are the bounds
-- add safe linking
-- add tcache (currently 1 thread only)
+The API is in `include/allocator.h`: `salloc`, `sfree`, `srealloc`, `print_debug`.
+
+## Status
+
+Work in progress. Next up:
+
+- [ ] safe linking
+- [ ] thread cache (right now it's one lock)
+- [ ] tests and a fuzzer
+- [ ] vulnerability "lab" - examples of exploits and how the hardening prevents them
