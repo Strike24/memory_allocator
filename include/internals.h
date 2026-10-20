@@ -56,7 +56,12 @@ typedef struct heapinfo
 
 // shared globals
 extern heapinfo heap;
+extern pthread_mutex_t heap_lock;
 extern uint32_t global_cookie;
+
+// global internals (without mutex lock!)
+void *salloc_internal(size_t size);
+void sfree_internal(void *memory);
 
 // chunks.c
 void add_to_bin(heapchunk *chunk);

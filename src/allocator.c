@@ -12,19 +12,30 @@ static void advise_free(heapchunk *chunk);
 heapinfo heap = {0}; // global heap structure
 
 uint32_t global_cookie = 0;
-static pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to allow thread-safe allocation
+pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to allow thread-safe allocation
 
 void *salloc(size_t size)
 {
-    pthread_mutex_lock(&heap_lock);
+    // check if there are chunks in tcache or lazy init it
+    void *cached = tcache_get(size);
+    if (cached != NULL)
+        return cached;
 
-    // lazy init
+    // if no tcache chunks, lock global heap and allocate
+    pthread_mutex_lock(&heap_lock);
+    void *memory = salloc_internal(size);
+    pthread_mutex_unlock(&heap_lock);
+    return memory;
+}
+
+void *salloc_internal(size_t size)
+{
+    // lazy init global heap
     if (heap.initalized == 0)
     {
         int rc = init_heap(&heap);
         if (rc != 0)
         {
-            pthread_mutex_unlock(&heap_lock);
             return NULL;
         }
     }
@@ -34,7 +45,6 @@ void *salloc(size_t size)
 
     if (size > MAX_CHUNK_SIZE)
     {
-        pthread_mutex_unlock(&heap_lock);
         return NULL;
     }
 
@@ -49,7 +59,6 @@ void *salloc(size_t size)
         free = increase_heap(size);
         if (free == NULL)
         {
-            pthread_mutex_unlock(&heap_lock);
             return NULL;
         }
     }
@@ -65,16 +74,20 @@ void *salloc(size_t size)
 
     _Static_assert(offsetof(heapchunk, payload) % 16 == 0, "chunk misaligned");
 
-    pthread_mutex_unlock(&heap_lock);
     return allocated_memory;
 }
 
 void sfree(void *memory)
 {
+    pthread_mutex_lock(&heap_lock);
+    free(memory);
+    pthread_mutex_unlock(&heap_lock);
+}
+
+void sfree_internal(void *memory)
+{
     if (memory == NULL)
         return;
-
-    pthread_mutex_lock(&heap_lock);
 
     heapchunk *chunk = get_validated_chunk(memory);
 
@@ -92,7 +105,6 @@ void sfree(void *memory)
     add_to_bin(merged);
     advise_free(merged);
 
-    pthread_mutex_unlock(&heap_lock);
     return;
 }
 
@@ -148,9 +160,9 @@ void *srealloc(void *memory, size_t size)
     }
 
     // not enough space, must relocate
-    pthread_mutex_unlock(&heap_lock);
+    // call salloc and sfree with lock in place
 
-    void *new_allocated = salloc(size);
+    void *new_allocated = salloc_internal(size);
     if (new_allocated == NULL)
     {
         return NULL;
@@ -158,7 +170,9 @@ void *srealloc(void *memory, size_t size)
     memcpy(new_allocated, memory, current_size);
 
     // free old chunk
-    sfree(original_chunk->payload);
+    sfree_internal(original_chunk->payload);
+
+    pthread_mutex_unlock(&heap_lock);
     return new_allocated;
 }
 

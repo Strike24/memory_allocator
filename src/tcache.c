@@ -23,7 +23,7 @@ static void tcache_init()
 {
     size_t tcache_size = sizeof(tcache_thread);
 
-    per_thread_tcache = (tcache_thread *)salloc(tcache_size); // TODO: Prevent recursion loop of salloc calling tcache_get calling salloc
+    per_thread_tcache = (tcache_thread *)salloc_internal(tcache_size);
     memset(per_thread_tcache, 0, tcache_size);
 }
 
@@ -32,7 +32,10 @@ void *tcache_get(size_t size)
     // Lazy initialize tcache if not initialized for specific thread yet
     if (per_thread_tcache == NULL)
     {
+        // Lock heap mutex to prevent salloc from calling tcache_init
+        pthread_mutex_lock(&heap_lock);
         tcache_init();
+        pthread_mutex_unlock(&heap_lock);
         return NULL;
     }
 }
