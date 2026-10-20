@@ -77,6 +77,15 @@ heapchunk *get_validated_chunk(void *memory);
 void abort_canary();
 void abort_doublefree();
 
+// tcache.c
+
+// pop a 'size' sized chunk from tcache, null if miss
+void *tcache_get(size_t size);
+// push a chunk to tcache, false if bin full
+bool tcache_put(heapchunk *chunk);
+// drain all bins back to global heap
+void tcache_flush(void);
+
 uintptr_t round_down_page(uintptr_t n, size_t page_size);
 uintptr_t round_up_page(uintptr_t n, size_t page_size);
 size_t align_size(size_t size, size_t alignment);

@@ -9,7 +9,8 @@ static void *request_space(size_t required_space);
 static heapchunk *increase_heap(size_t required_space);
 static void advise_free(heapchunk *chunk);
 
-heapinfo heap = {0};
+heapinfo heap = {0}; // global heap structure
+
 uint32_t global_cookie = 0;
 static pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to allow thread-safe allocation
 
