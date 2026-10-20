@@ -1,16 +1,7 @@
 #ifndef ALLOCATOR_H
 #define ALLOCATOR_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <unistd.h>
 #include <stddef.h>
-#include <pthread.h>
-#include <string.h>
 
 // Main allocator function, takes a size and returns a curated memory chunk
 void *salloc(size_t size);

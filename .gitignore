@@ -2,3 +2,5 @@ allocator
 allocator_not_secured
 .vscode
 old_readme.md
+libsalloc.so
+demo

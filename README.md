@@ -24,8 +24,9 @@ I wrote about building it here: [Building a Memory Allocator](https://strike24.g
 ## Build
 
 ```
-make allocator      # with hardening
-make notsecured     # same allocator, checks off (for comparing exploits)
+make libsalloc      # make shared library
+make demo           # make demo program in main.c linked with the library
+make notsecured     # make a non-secure version of the library+demo
 ```
 
 The API is in `include/allocator.h`: `salloc`, `sfree`, `srealloc`, `print_debug`.

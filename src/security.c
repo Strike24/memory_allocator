@@ -32,14 +32,9 @@ void abort_doublefree()
 
 void init_canary()
 {
-    FILE *urandom = fopen("/dev/urandom", "r");
-    if ((urandom != NULL) && (fread(&global_cookie, sizeof(uint32_t), 1, urandom) == 1))
+    if (getrandom(&global_cookie, sizeof(global_cookie), 0) != sizeof(global_cookie))
     {
-        fclose(urandom);
-    }
-    else
-    {
-        perror("/dev/urandom failed to be read");
+        perror("getrandom() failed");
         abort();
     }
 }

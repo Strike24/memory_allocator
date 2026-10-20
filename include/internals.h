@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <sys/random.h>
 
 // used to verify a chunk's integrety
 #define MAGIC_NUM 0xBEEF
