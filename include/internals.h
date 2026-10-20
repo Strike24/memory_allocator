@@ -43,7 +43,8 @@ typedef struct heapchunk
 // next,prev pointers aren't needed when chunk is being used
 // Therfore, they can be replaced with the data when allocated
 
-#define HEADER_SIZE (sizeof(heapchunk) - sizeof(uint8_t[0]))
+// size of header before payload starts
+#define HEADER_SIZE offsetof(heapchunk, payload)
 
 typedef struct heapinfo
 {

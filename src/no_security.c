@@ -7,16 +7,16 @@ heapchunk *get_validated_chunk(void *memory)
 
     heapchunk *chunk = (heapchunk *)((char *)memory - offsetof(heapchunk, payload));
 
+    // disabled on "no_security" mode
     // if (chunk->canary != calculate_canary(chunk))
     // {
-    //     fprintf(stderr, "chunk canary cookie got corrupted, aborting.\n");
-    //     abort();
+    //     abort_canary();
     // }
     // if (chunk->is_inuse == false)
     // {
-    //     fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");
-    //     abort();
+    //     abort_doublefree();
     // }
+
     return chunk;
 }
 
@@ -36,8 +36,9 @@ void init_canary()
     return;
 }
 
-inline size_t calculate_canary(heapchunk *chunk)
+inline uint32_t calculate_canary(heapchunk *chunk)
 {
-    return global_cookie ^ (size_t)chunk;
+    // canary disabled (0) on no security mode
+    // return (uint32_t)(global_cookie ^ (size_t)chunk);
     return 0;
 }

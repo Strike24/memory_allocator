@@ -1,3 +1,6 @@
+#ifndef ALLOCATOR_H
+#define ALLOCATOR_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -16,3 +19,5 @@ void sfree(void *memory);
 // Resizes the size of a memory block
 void *srealloc(void *memory, size_t size);
 void print_debug();
+
+#endif

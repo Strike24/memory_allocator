@@ -1,7 +1,8 @@
+#define _GNU_SOURCE
+
 #include "allocator.h"
 #include "internals.h"
 
-#define _GNU_SOURCE
 // allocator.c internals
 static int init_heap(heapinfo *heap);
 static void *request_space(size_t required_space);
@@ -96,12 +97,12 @@ void sfree(void *memory)
 
 void *srealloc(void *memory, size_t size)
 {
-    pthread_mutex_lock(&heap_lock);
     if (memory == NULL)
     {
-        pthread_mutex_unlock(&heap_lock);
         return salloc(size);
     }
+
+    pthread_mutex_lock(&heap_lock);
 
     if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
         size = MIN_CHUNK_SIZE;
@@ -198,7 +199,7 @@ static void *request_space(size_t required_space)
     void *mapped_memory = mmap(NULL, required_space, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if (mapped_memory == MAP_FAILED)
     {
-        perror("MMap failed to map memory.\n");
+        perror("MMap failed to map memory");
         return NULL;
     }
 
@@ -248,7 +249,7 @@ static void advise_free(heapchunk *chunk)
     uintptr_t pages_end_address = round_down_page(payload_end, PAGE_SIZE);
 
     size_t pages_length = pages_end_address - pages_start_address;
-    // if one or more pages fit in the chunk's payload,
+    // if one or more pages fit in the chunk's payload, advise the os to reuse the physical memory
     if ((pages_start_address < pages_end_address) && (pages_length >= (size_t)(REQ_PAGES_TO_FREE * PAGE_SIZE)))
     {
         if (madvise((void *)pages_start_address, pages_length, MADV_FREE) == -1)
