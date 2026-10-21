@@ -18,7 +18,7 @@ typedef struct tcache_thread
     struct tcache_chunk *entries[TCACHE_MAX_BINS]; // singly linked head pointers for bins
 } tcache_thread;
 
-__thread tcache_thread *per_thread_tcache = NULL;
+static __thread tcache_thread *per_thread_tcache = NULL;
 
 // for thread destructor
 static pthread_key_t tcache_destructor_key;
@@ -29,8 +29,10 @@ static void tcache_list_add(tcache_chunk *chunk, int bin);
 static void tcache_list_remove(tcache_chunk *chunk, int bin);
 static inline int get_tcache_idx(size_t size);
 
-static void tcache_thread_destructor()
+static void tcache_thread_destructor(void *data)
 {
+    (void *)data;
+
     if (per_thread_tcache != NULL)
     {
         tcache_flush();
@@ -56,6 +58,9 @@ static void tcache_init()
     size_t tcache_size = sizeof(tcache_thread);
 
     per_thread_tcache = (tcache_thread *)salloc_internal(tcache_size);
+    if (per_thread_tcache == NULL)
+        return;
+
     memset(per_thread_tcache, 0, tcache_size);
     pthread_mutex_unlock(&heap_lock);
 
@@ -103,9 +108,11 @@ bool tcache_put(heapchunk *chunk)
     if (per_thread_tcache->counts[bin] >= TCACHE_FILL_COUNT)
         return false; // bin is full
 
-    chunk->list.next = NULL;
-    chunk->list.prev = NULL;
-    tcache_list_add((tcache_chunk *)chunk->payload, bin);
+    tcache_chunk *tc = (tcache_chunk *)chunk->payload;
+    if (tc->key == per_thread_tcache)
+        abort_doublefree(); // if chunk already in tcache we double freed
+
+    tcache_list_add(tc, bin);
 
     return true;
 }
@@ -117,12 +124,16 @@ void tcache_flush(void)
 
     for (int i = 0; i < TCACHE_MAX_BINS; i++)
     {
-        for (int j = 0; j < per_thread_tcache->counts[i]; j++)
+
+        while (per_thread_tcache->entries[i] != NULL)
         {
             tcache_chunk *head = per_thread_tcache->entries[i];
 
             tcache_list_remove(head, i);
+
+            pthread_mutex_lock(&heap_lock);
             sfree_internal(head);
+            pthread_mutex_unlock(&heap_lock);
         }
     }
 }
@@ -157,4 +168,52 @@ static void tcache_list_remove(tcache_chunk *chunk, int bin)
 static inline int get_tcache_idx(size_t size)
 {
     return (size - 1) / 16;
+}
+
+void tcache_print(void)
+{
+    if (per_thread_tcache == NULL)
+    {
+        printf("[tcache] Uninitialized for this thread.\n");
+        return;
+    }
+
+    printf("========================================\n");
+    printf("   TCACHE STATE (Thread: %p)            \n", (void *)pthread_self());
+    printf("========================================\n");
+
+    int active_bins = 0;
+
+    for (int i = 0; i < TCACHE_MAX_BINS; i++)
+    {
+        int count = per_thread_tcache->counts[i];
+
+        // Skip empty bins to keep the output readable
+        if (count == 0)
+            continue;
+
+        active_bins++;
+        // Calculate the base size range for this bin index
+        size_t bin_size = (i + 1) * 16;
+        printf("Bin [%2d] (Size Class: %zu) | Count: %d/%d | Chunks: ",
+               i, bin_size, count, TCACHE_FILL_COUNT);
+
+        // Traverse the singly linked list of chunks in this bin
+        tcache_chunk *current = per_thread_tcache->entries[i];
+        while (current != NULL)
+        {
+            printf("[%p]", (void *)current);
+            current = current->next;
+
+            if (current != NULL)
+                printf(" -> ");
+        }
+        printf("\n");
+    }
+
+    if (active_bins == 0)
+    {
+        printf("[tcache] All bins are currently empty.\n");
+    }
+    printf("========================================\n");
 }

@@ -4,7 +4,7 @@
 
 int main()
 {
-    char *str = (char *)salloc(8);
+    char *str = (char *)salloc(2000);
     if (str == NULL)
     {
         fprintf(stderr, "Allocation failed!\n");
@@ -16,9 +16,11 @@ int main()
 
     printf("Pointer to allocated memory: %p\n\n", str);
 
-    srealloc(str, 16);
-    printf("Data after being reallocated to 16: %s\n", str);
+    // srealloc(str, 16);
+    // printf("Data after being reallocated to 16: %s\n", str);
 
     sfree(str);
     printf("Data after free: %s\n", str);
+
+    tcache_print();
 }

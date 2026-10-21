@@ -89,7 +89,7 @@ void sfree(void *memory)
         return;
 
     pthread_mutex_lock(&heap_lock);
-    free(memory);
+    sfree_internal(memory);
     pthread_mutex_unlock(&heap_lock);
 }
 
