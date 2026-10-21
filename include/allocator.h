@@ -10,5 +10,6 @@ void sfree(void *memory);
 // Resizes the size of a memory block
 void *srealloc(void *memory, size_t size);
 void print_debug();
+void tcache_print(void);
 
 #endif
