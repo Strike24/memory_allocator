@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=gnu11 -Iinclude -pthread -fsanitize=address
 
-SRCS = src/allocator.c src/chunks.c
+SRCS = src/allocator.c src/chunks.c src/tcache.c
 
 # shared library
 libsalloc.so: $(SRCS) src/security.c

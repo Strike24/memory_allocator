@@ -16,6 +16,18 @@ pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER; // Mutex lock to allow th
 
 void *salloc(size_t size)
 {
+
+    if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
+        size = MIN_CHUNK_SIZE;
+
+    if (size > MAX_CHUNK_SIZE)
+    {
+        return NULL;
+    }
+
+    // Align chunk size
+    size = align_size(size, ALIGNMENT);
+
     // check if there are chunks in tcache or lazy init it
     void *cached = tcache_get(size);
     if (cached != NULL)
@@ -39,17 +51,6 @@ void *salloc_internal(size_t size)
             return NULL;
         }
     }
-
-    if (size < MIN_CHUNK_SIZE) // Min chunk size 16 so list pointers have a space when freed
-        size = MIN_CHUNK_SIZE;
-
-    if (size > MAX_CHUNK_SIZE)
-    {
-        return NULL;
-    }
-
-    // Align chunk size
-    size = align_size(size, ALIGNMENT);
 
     // loop over free memory chunks to see if size is available
     heapchunk *free = find_free_chunk(size);
@@ -79,6 +80,14 @@ void *salloc_internal(size_t size)
 
 void sfree(void *memory)
 {
+    if (memory == NULL)
+        return;
+
+    heapchunk *chunk = get_validated_chunk(memory);
+
+    if (tcache_put(chunk))
+        return;
+
     pthread_mutex_lock(&heap_lock);
     free(memory);
     pthread_mutex_unlock(&heap_lock);
@@ -90,7 +99,6 @@ void sfree_internal(void *memory)
         return;
 
     heapchunk *chunk = get_validated_chunk(memory);
-
     // poisoning the freed memory to try and catch uaf's
     // memset(chunk->payload, OVERWRITE_HEX, chunk->size);
 

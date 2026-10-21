@@ -59,7 +59,7 @@ extern heapinfo heap;
 extern pthread_mutex_t heap_lock;
 extern uint32_t global_cookie;
 
-// global internals (without mutex lock!)
+// global internals (without mutex lock and without tcache)
 void *salloc_internal(size_t size);
 void sfree_internal(void *memory);
 
