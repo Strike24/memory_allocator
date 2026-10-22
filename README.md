@@ -17,10 +17,10 @@ I wrote about building it here: [Building a Memory Allocator](https://strike24.g
 ## Hardening
 
 - **Canaries:** each chunk header has a 32-bit canary (random cookie XOR the chunk address). Checked on free, on the next neighbour, and while searching bins. A bad canary there aborts.
+- **Safe linking**: tcache fd pointers are xor'd with their offseted address, utilizing the ASLR to prevent heap metadata corruption. Heavly inspired by [checkpoint's addition to ptmalloc](https://research.checkpoint.com/2020/safe-linking-eliminating-a-20-year-old-malloc-exploit-primitive/).
 - **Safe unlinking:** `prev->next` and `next->prev` are checked before a chunk leaves a bin.
 - **Double free:** freeing a chunk that's already free aborts.
 - **Boundary chunk:** every arena ends with a zero-size chunk so walking to the next neighbour stops at the end of the arena.
-- **Safe linking**: Soon.
 
 ## TCache
 
@@ -40,7 +40,7 @@ The API is in `include/allocator.h`: `salloc`, `sfree`, `srealloc`, `print_debug
 
 Work in progress. Next up:
 
-- [ ] safe linking
-- [ ] thread cache (right now it's one lock)
+- [v] safe linking
+- [v] thread cache (right now it's one lock)
 - [ ] tests and a fuzzer
 - [ ] vulnerability "lab" - examples of exploits and how the hardening prevents them
