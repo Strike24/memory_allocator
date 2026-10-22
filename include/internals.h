@@ -16,7 +16,7 @@
 #define MAGIC_NUM 0xBEEF
 #define OVERWRITE_HEX 0xDE
 #define NUM_BINS 10
-#define MIN_CHUNK_SIZE 16
+#define MIN_CHUNK_SIZE 32 // 16 for pointers + 8 for prev_size + padding for alignment
 #define MAX_CHUNK_SIZE (SIZE_MAX / 2)
 #define ALIGNMENT 16
 #define ARENA_SIZE (2 * 1024 * 1024) // 2MB

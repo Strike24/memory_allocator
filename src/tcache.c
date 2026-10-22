@@ -69,7 +69,10 @@ static void tcache_init()
 
     per_thread_tcache = (tcache_thread *)salloc_internal(tcache_size);
     if (per_thread_tcache == NULL)
+    {
+        pthread_mutex_unlock(&heap_lock);
         return;
+    }
 
     memset(per_thread_tcache, 0, tcache_size);
     pthread_mutex_unlock(&heap_lock);
@@ -120,7 +123,17 @@ bool tcache_put(heapchunk *chunk)
 
     tcache_chunk *tc = (tcache_chunk *)chunk->payload;
     if (tc->key == per_thread_tcache)
-        abort_doublefree(); // if chunk already in tcache we double freed
+    {
+        // suspecting double free, check list to be sure
+        tcache_chunk *head = per_thread_tcache->entries[bin];
+        while (head != NULL)
+        {
+            if (head == tc)
+                abort_doublefree();
+
+            head = REVEAL_PTR(&head->next, head->next, tcache_chunk *);
+        }
+    }
 
     tcache_list_add(tc, bin);
 
@@ -138,9 +151,6 @@ void tcache_flush(void)
         while (per_thread_tcache->entries[i] != NULL)
         {
             tcache_chunk *head = per_thread_tcache->entries[i];
-
-            if (!aligned_OK(head))
-                abort_corruption();
 
             tcache_list_remove(head, i);
 
@@ -171,6 +181,9 @@ static void tcache_list_remove(tcache_chunk *chunk, int bin)
         return;
 
     tcache_chunk *next = REVEAL_PTR(&chunk->next, chunk->next, tcache_chunk *);
+
+    if (next != NULL && !aligned_OK(next))
+        abort_corruption();
 
     chunk->key = NULL; // disconnect chunk from list and prevent double freeing
 
