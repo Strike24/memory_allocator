@@ -81,7 +81,7 @@ uint32_t calculate_canary(heapchunk *chunk);
 heapchunk *get_validated_chunk(void *memory);
 void abort_canary();
 void abort_doublefree();
-
+void abort_corruption();
 // tcache.c
 
 // pop a 'size' sized chunk from tcache, null if miss

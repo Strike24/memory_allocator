@@ -24,6 +24,12 @@ void abort_canary()
     abort();
 }
 
+void abort_corruption()
+{
+    fprintf(stderr, "Heap corruption detected (salloc), aborting.\n");
+    abort();
+}
+
 void abort_doublefree()
 {
     fprintf(stderr, "Double free detected, aborting to avoid corruption.\n");

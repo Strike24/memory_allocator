@@ -4,10 +4,20 @@
 
 #define TCACHE_MAX_BINS 64
 #define TCACHE_FILL_COUNT 7
+#define PAGE_SHIFT 12
+
+// Safe-linking for fd pointer in tcache to prevent metadata corruption. (https://research.checkpoint.com/2020/safe-linking-eliminating-a-20-year-old-malloc-exploit-primitive/)
+#define PROTECT_PTR(pos, ptr, type) \
+    ((type)((((size_t)pos) >> PAGE_SHIFT) ^ ((size_t)ptr)))
+
+#define REVEAL_PTR(pos, ptr, type) \
+    PROTECT_PTR(pos, ptr, type)
+
+#define aligned_OK(m) (((unsigned long)(m) & 15) == 0)
 
 typedef struct tcache_chunk
 {
-    struct tcache_chunk *next;
+    struct tcache_chunk *next; // protected with safe linking
     struct tcache_thread *key;
 
 } tcache_chunk;
@@ -31,7 +41,7 @@ static inline int get_tcache_idx(size_t size);
 
 static void tcache_thread_destructor(void *data)
 {
-    (void *)data;
+    (void)data;
 
     if (per_thread_tcache != NULL)
     {
@@ -129,6 +139,9 @@ void tcache_flush(void)
         {
             tcache_chunk *head = per_thread_tcache->entries[i];
 
+            if (!aligned_OK(head))
+                abort_corruption();
+
             tcache_list_remove(head, i);
 
             pthread_mutex_lock(&heap_lock);
@@ -146,7 +159,7 @@ static void tcache_list_add(tcache_chunk *chunk, int bin)
     tcache_chunk *old_head = per_thread_tcache->entries[bin];
 
     chunk->key = per_thread_tcache;
-    chunk->next = old_head;
+    chunk->next = PROTECT_PTR(&chunk->next, old_head, tcache_chunk *);
 
     per_thread_tcache->entries[bin] = chunk;
     per_thread_tcache->counts[bin]++;
@@ -157,7 +170,7 @@ static void tcache_list_remove(tcache_chunk *chunk, int bin)
     if (chunk == NULL)
         return;
 
-    tcache_chunk *next = chunk->next;
+    tcache_chunk *next = REVEAL_PTR(&chunk->next, chunk->next, tcache_chunk *);
 
     chunk->key = NULL; // disconnect chunk from list and prevent double freeing
 
@@ -203,7 +216,7 @@ void tcache_print(void)
         while (current != NULL)
         {
             printf("[%p]", (void *)current);
-            current = current->next;
+            current = REVEAL_PTR(&current->next, current->next, tcache_chunk *);
 
             if (current != NULL)
                 printf(" -> ");
