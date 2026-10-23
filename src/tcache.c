@@ -7,6 +7,9 @@
 #define PAGE_SHIFT 12
 
 // Safe-linking for fd pointer in tcache to prevent metadata corruption. (https://research.checkpoint.com/2020/safe-linking-eliminating-a-20-year-old-malloc-exploit-primitive/)
+
+// when unsecured is enabled return regular ptrs
+#ifndef UNSECURED
 #define PROTECT_PTR(pos, ptr, type) \
     ((type)((((size_t)pos) >> PAGE_SHIFT) ^ ((size_t)ptr)))
 
@@ -14,6 +17,15 @@
     PROTECT_PTR(pos, ptr, type)
 
 #define aligned_OK(m) (((unsigned long)(m) & 15) == 0)
+#else
+#define PROTECT_PTR(pos, ptr, type) \
+    ((type)ptr)
+
+#define REVEAL_PTR(pos, ptr, type) \
+    PROTECT_PTR(pos, ptr, type)
+
+#define aligned_OK(m) (true)
+#endif
 
 typedef struct tcache_chunk
 {

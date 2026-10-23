@@ -7,17 +7,14 @@ SRCS = src/allocator.c src/chunks.c src/tcache.c
 libsalloc.so: $(SRCS) src/security.c
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ $(SRCS) src/security.c
 
+unsecured: CFLAGS += -DUNSECURED
+unsecured: libsalloc.so
+
 # demo linked against the library
 demo: main.c libsalloc.so
 	$(CC) $(CFLAGS) -o $@ main.c -L. -lsalloc -Wl,-rpath,'$$ORIGIN'
 
 
-
-# Static builds (original targets)
-notsecured: main.c $(SRCS) src/no_security.c
-	$(CC) $(CFLAGS) -o allocator_not_secured $^
-
-
-.PHONY: clean
+.PHONY: clean unsecured
 clean:
-	rm -f allocator allocator_not_secured demo libsalloc.so
+	rm -f allocator demo libsalloc.so
