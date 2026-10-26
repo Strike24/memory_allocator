@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -std=gnu11 -Iinclude -pthread -fsanitize=address
+CFLAGS = -Wall -Wextra -g -std=gnu11 -Iinclude -pthread
 
 SRCS = src/allocator.c src/chunks.c src/tcache.c
 
